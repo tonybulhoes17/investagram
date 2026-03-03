@@ -261,9 +261,9 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
                 <p className="text-white font-semibold">{post.ativo_nome}</p>
               </div>
               <div className="text-right">
-                {post.classe && (
+                {post.ativo_classe && (
                   <span className="text-xs text-brand-muted bg-brand-card px-2 py-0.5 rounded-lg border border-brand-border">
-                    {ASSET_CLASSE_LABELS[post.classe as keyof typeof ASSET_CLASSE_LABELS] ?? post.classe}
+                    ASSET_CLASSE_LABELS[post.ativo_classe as keyof typeof ASSET_CLASSE_LABELS] ?? post.ativo_classe
                   </span>
                 )}
                 {post.data_operacao && (
