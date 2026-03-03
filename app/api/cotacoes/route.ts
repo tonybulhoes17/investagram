@@ -15,7 +15,7 @@ export async function GET() {
     return NextResponse.json(cache.data)
   }
 
-  const token = "eY3ufpcXC4RwXwckviUgFc"
+  const token = process.env.BRAPI_TOKEN ?? 'demo'
 
   try {
     // Busca cripto, BR e EUA em paralelo
