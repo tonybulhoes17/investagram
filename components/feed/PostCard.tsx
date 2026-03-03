@@ -34,7 +34,7 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
   useState(() => {
     supabase
       .from('likes')
-      .select('profiles:user_id(id, nome, username, foto_url)')
+      .select('user_id, profiles:user_id(id, nome, username, foto_url)')
       .eq('post_id', postId)
       .order('created_at', { ascending: false })
       .limit(50)
@@ -293,8 +293,9 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
         {/* Rodapé: ações */}
         <div className="flex items-center gap-4 pt-3 border-t border-brand-border/50">
 
-          {/* Curtir + ver quem curtiu */}
-          <div className="flex items-center gap-1">
+          {/* Curtir + ver quem curtiu (botões separados) */}
+          <div className="flex items-center gap-2">
+            {/* Botão curtir */}
             <button
               onClick={async () => {
                 onCurtir(post.id)
@@ -313,12 +314,14 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
                 <Heart size={17} className={post.ja_curtiu ? 'fill-red-400' : ''} />
               </motion.div>
             </button>
-            {/* Número clicável para ver quem curtiu */}
+
+            {/* Número clicável → abre modal */}
             <button
-              onClick={() => post._count_likes > 0 && setModalCurtidas(true)}
-              className={cn('text-sm transition-colors', post._count_likes > 0 ? 'text-brand-muted hover:text-white cursor-pointer' : 'text-brand-muted cursor-default')}
+              onClick={() => setModalCurtidas(true)}
+              className="flex items-center gap-1 text-sm text-brand-muted hover:text-white transition-colors"
             >
-              {formatarNumero(post._count_likes)}
+              <Users size={14} />
+              <span>{formatarNumero(post._count_likes)}</span>
             </button>
           </div>
 
