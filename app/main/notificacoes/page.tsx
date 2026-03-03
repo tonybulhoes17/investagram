@@ -1,8 +1,9 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Heart, MessageCircle, UserPlus, Check, CheckCheck, Trash2, X } from 'lucide-react'
+import { Bell, Heart, MessageCircle, UserPlus, CheckCheck, X } from 'lucide-react'
 import { useNotificacoes, type Notification } from '@/hooks/useNotificacoes'
 import { tempoRelativo } from '@/lib/utils'
 import Link from 'next/link'
@@ -13,22 +14,20 @@ function iconeNotif(tipo: Notification['tipo']) {
   if (tipo === 'seguiu')     return <UserPlus size={14} className="text-brand-green" />
 }
 
-function textoNotif(n: Notification) {
-  const nome = n.actor?.nome ?? 'Alguém'
-  if (n.tipo === 'curtida')    return `${nome} curtiu seu post`
-  if (n.tipo === 'comentario') return `${nome} comentou no seu post`
-  if (n.tipo === 'seguiu')     return `${nome} começou a te seguir`
-  return ''
-}
-
 function subTextoNotif(n: Notification) {
   if (!n.post) return null
   return n.post.ativo_nome ?? n.post.conteudo?.slice(0, 60) ?? null
 }
 
 export default function NotificacoesPage() {
-  const router = useRouter()
-  const { notificacoes, naoLidas, loading, marcarTodasLidas, marcarLida, deletar } = useNotificacoes()
+  const { notificacoes, naoLidas, loading, marcarTodasLidas, deletar } = useNotificacoes()
+
+  // Marca todas como lidas automaticamente ao abrir a página
+  useEffect(() => {
+    if (!loading && naoLidas > 0) {
+      marcarTodasLidas()
+    }
+  }, [loading])
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -37,19 +36,14 @@ export default function NotificacoesPage() {
         <div className="flex items-center gap-2">
           <Bell size={20} className="text-white" />
           <h1 className="text-xl font-bold text-white">Notificações</h1>
-          {naoLidas > 0 && (
-            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-              {naoLidas}
-            </span>
-          )}
         </div>
-        {naoLidas > 0 && (
+        {notificacoes.length > 0 && (
           <button
-            onClick={marcarTodasLidas}
+            onClick={() => {/* limpar todas futuramente */}}
             className="flex items-center gap-1.5 text-xs text-brand-muted hover:text-brand-green transition-colors"
           >
             <CheckCheck size={14} />
-            Marcar todas como lidas
+            Todas lidas ao abrir
           </button>
         )}
       </div>
@@ -88,7 +82,6 @@ export default function NotificacoesPage() {
               const href = n.post_id
                 ? `/main/post/${n.post_id}`
                 : `/main/perfil/${n.actor_id}`
-
               const sub = subTextoNotif(n)
 
               return (
@@ -98,17 +91,8 @@ export default function NotificacoesPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ delay: i * 0.03 }}
-                  className={`card p-4 flex items-start gap-3 transition-colors ${
-                    !n.lida ? 'border-brand-green/20 bg-brand-green/5' : ''
-                  }`}
+                  className="card p-4 flex items-start gap-3 transition-colors"
                 >
-                  {/* Ponto não lida */}
-                  <div className="w-2 shrink-0 mt-1.5">
-                    {!n.lida && (
-                      <div className="w-2 h-2 rounded-full bg-brand-green" />
-                    )}
-                  </div>
-
                   {/* Avatar do ator */}
                   <Link href={`/main/perfil/${n.actor_id}`} className="shrink-0">
                     <div className="w-10 h-10 rounded-full bg-brand-surface border border-brand-border overflow-hidden hover:border-brand-green transition-colors relative">
@@ -127,7 +111,7 @@ export default function NotificacoesPage() {
                   </Link>
 
                   {/* Texto */}
-                  <Link href={href} className="flex-1 min-w-0 group" onClick={() => !n.lida && marcarLida(n.id)}>
+                  <Link href={href} className="flex-1 min-w-0 group">
                     <p className="text-sm text-white leading-snug group-hover:text-brand-green transition-colors">
                       <span className="font-semibold">@{n.actor?.username}</span>
                       {' '}
@@ -143,25 +127,14 @@ export default function NotificacoesPage() {
                     </p>
                   </Link>
 
-                  {/* Ações */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {!n.lida && (
-                      <button
-                        onClick={() => marcarLida(n.id)}
-                        title="Marcar como lida"
-                        className="p-1.5 text-brand-muted hover:text-brand-green transition-colors rounded-lg hover:bg-brand-surface"
-                      >
-                        <Check size={13} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => deletar(n.id)}
-                      title="Remover"
-                      className="p-1.5 text-brand-muted hover:text-red-400 transition-colors rounded-lg hover:bg-brand-surface"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
+                  {/* Remover */}
+                  <button
+                    onClick={() => deletar(n.id)}
+                    title="Remover"
+                    className="p-1.5 text-brand-muted hover:text-red-400 transition-colors rounded-lg hover:bg-brand-surface shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
                 </motion.div>
               )
             })}
