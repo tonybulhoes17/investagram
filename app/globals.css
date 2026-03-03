@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg:      #0F1117;
+    --card:    #1A1F2E;
+    --border:  #2D3748;
+    --green:   #00C896;
+    --muted:   #6B7280;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-brand-dark text-white font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  /* Scrollbar personalizada (dark) */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #1A1F2E; }
+  ::-webkit-scrollbar-thumb { background: #2D3748; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #00C896; }
+}
+
+@layer components {
+  .card {
+    @apply bg-brand-card border border-brand-border rounded-2xl;
+  }
+
+  .btn-primary {
+    @apply bg-brand-green text-brand-dark font-semibold px-4 py-2 rounded-xl
+           hover:bg-brand-green-dim transition-colors duration-200 disabled:opacity-50
+           disabled:cursor-not-allowed;
+  }
+
+  .btn-outline {
+    @apply border border-brand-border text-white font-medium px-4 py-2 rounded-xl
+           hover:border-brand-green hover:text-brand-green transition-colors duration-200;
+  }
+
+  .input {
+    @apply w-full bg-brand-surface border border-brand-border rounded-xl px-4 py-3
+           text-white placeholder-brand-muted focus:outline-none focus:border-brand-green
+           transition-colors duration-200;
+  }
+
+  .badge-compra {
+    @apply bg-brand-green/20 text-brand-green text-xs font-bold px-2 py-0.5 rounded-full;
+  }
+
+  .badge-venda {
+    @apply bg-red-500/20 text-red-400 text-xs font-bold px-2 py-0.5 rounded-full;
+  }
+
+  .badge-tese {
+    @apply bg-purple-500/20 text-purple-400 text-xs font-bold px-2 py-0.5 rounded-full;
+  }
+}
