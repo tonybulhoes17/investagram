@@ -263,7 +263,7 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
               <div className="text-right">
                 {post.ativo_classe && (
                   <span className="text-xs text-brand-muted bg-brand-card px-2 py-0.5 rounded-lg border border-brand-border">
-                    ASSET_CLASSE_LABELS[post.ativo_classe as keyof typeof ASSET_CLASSE_LABELS] ?? post.ativo_classe
+                    {String(ASSET_CLASSE_LABELS[post.ativo_classe as keyof typeof ASSET_CLASSE_LABELS] ?? post.ativo_classe)}
                   </span>
                 )}
                 {post.data_operacao && (
