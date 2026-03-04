@@ -269,7 +269,7 @@ export default function PerfilPage() {
       </div>
 
       {/* Conteúdo das abas */}
-      {abaAtiva !== 'carteira' && <PerfilFeedList userId={userId} tipo={abaAtiva} />}
+      {abaAtiva !== 'carteira' && <PerfilFeedList userId={userId} tipo={abaAtiva as any} />}
 
       {abaAtiva === 'carteira' && (
         <div className="space-y-4">
