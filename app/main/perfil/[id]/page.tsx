@@ -2,98 +2,142 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { MapPin, Calendar, Users, UserPlus, UserCheck, Edit3 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { MapPin, Calendar, Users, UserPlus, UserCheck, Edit3, Star, Send, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { PerfilFeedList } from '@/components/feed/PerfilFeedList'
 import { CarteiraChart } from '@/components/carteira/PieChart'
-import { formatarNumero } from '@/lib/utils'
+import { formatarNumero, tempoRelativo } from '@/lib/utils'
 import type { Profile, PortfolioAsset, AssetClasse } from '@/types'
 import { ASSET_CLASSE_COLORS, ASSET_CLASSE_LABELS } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { criarNotificacao } from '@/lib/notificacoes'
 
-type Aba = 'posts' | 'teses' | 'carteira'
+type Avaliacao = {
+  id:           string
+  portfolio_id: string
+  user_id:      string
+  nota:         number
+  comentario:   string | null
+  created_at:   string
+  profiles:     { nome: string; username: string; foto_url: string | null }
+}
+
+// ── Componente de estrelas ───────────────────────────────────
+function Estrelas({ nota, tamanho = 18, interativo = false, onChange }: {
+  nota:        number
+  tamanho?:    number
+  interativo?: boolean
+  onChange?:   (n: number) => void
+}) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1,2,3,4,5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={!interativo}
+          onClick={() => onChange?.(n)}
+          onMouseEnter={() => interativo && setHover(n)}
+          onMouseLeave={() => interativo && setHover(0)}
+          className={interativo ? 'cursor-pointer transition-transform hover:scale-110' : 'cursor-default'}
+        >
+          <Star
+            size={tamanho}
+            className={n <= (hover || nota) ? 'text-yellow-400 fill-yellow-400' : 'text-brand-muted'}
+          />
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function PerfilPage() {
   const params   = useParams()
+  const router   = useRouter()
   const userId   = params.id as string
   const { user } = useAuth()
-  const router = useRouter()
-  const [perfil,        setPerfil]        = useState<Profile | null>(null)
-  const [abaAtiva,      setAbaAtiva]      = useState<Aba>('posts')
-  const [jaSigo,        setJaSigo]        = useState(false)
-  const [seguidores,    setSeguidores]    = useState(0)
-  const [seguindo,      setSeguindo]      = useState(0)
-  const [totalPosts,    setTotalPosts]    = useState(0)
-  const [carteira,      setCarteira]      = useState<PortfolioAsset[]>([])
-  const [carregando,    setCarregando]    = useState(true)
+
+  const [perfil,      setPerfil]      = useState<Profile | null>(null)
+  const [carteira,    setCarteira]    = useState<PortfolioAsset[]>([])
+  const [portfolioId, setPortfolioId] = useState<string | null>(null)
+  const [seguidores,  setSeguidores]  = useState(0)
+  const [seguindo,    setSeguindo]    = useState(0)
+  const [totalPosts,  setTotalPosts]  = useState(0)
+  const [jaSigo,      setJaSigo]      = useState(false)
+  const [carregando,  setCarregando]  = useState(true)
+  const [abaAtiva,    setAbaAtiva]    = useState<'movimentacao' | 'tese' | 'carteira'>('movimentacao')
+
+  // Avaliações
+  const [avaliacoes,    setAvaliacoes]    = useState<Avaliacao[]>([])
+  const [notaMedia,     setNotaMedia]     = useState(0)
+  const [minhaAvalia,   setMinhaAvalia]   = useState<Avaliacao | null>(null)
+  const [novaNota,      setNovaNota]      = useState(0)
+  const [novoComentario, setNovoComentario] = useState('')
+  const [enviandoAvalia, setEnviandoAvalia] = useState(false)
 
   const ehMeuPerfil = user?.id === userId
 
-  useEffect(() => {
-    if (userId) carregarPerfil()
-  }, [userId, user])
+  useEffect(() => { if (userId) carregarPerfil() }, [userId, user])
 
   const carregarPerfil = async () => {
     setCarregando(true)
-
-    const [
-      { data: perfilData },
-      { count: segCount },
-      { count: seguCount },
-      { count: postsCount },
-    ] = await Promise.all([
+    const [{ data: perfilData }, { count: segCount }, { count: segdoCount }, { count: postsCount }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
       supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userId),
       supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
       supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
     ])
-
     setPerfil(perfilData)
     setSeguidores(segCount ?? 0)
-    setSeguindo(seguCount ?? 0)
+    setSeguindo(segdoCount ?? 0)
     setTotalPosts(postsCount ?? 0)
 
-    // Verifica se o usuário logado segue este perfil
-    if (user && !ehMeuPerfil) {
-      const { count } = await supabase
-        .from('followers')
-        .select('*', { count: 'exact', head: true })
-        .eq('follower_id', user.id)
-        .eq('following_id', userId)
+    if (user) {
+      const { count } = await supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', user.id).eq('following_id', userId)
       setJaSigo((count ?? 0) > 0)
     }
 
-    // Carrega carteira
-    const { data: portfolio } = await supabase
-      .from('portfolios')
-      .select('*, portfolio_assets(*)')
-      .eq('user_id', userId)
-      .single()
-
-    if (portfolio?.portfolio_assets) {
-      setCarteira(portfolio.portfolio_assets)
+    const { data: portfolioData } = await supabase
+      .from('portfolios').select('*, portfolio_assets(*)').eq('user_id', userId).single()
+    if (portfolioData) {
+      setPortfolioId(portfolioData.id)
+      setCarteira(portfolioData.portfolio_assets ?? [])
+      carregarAvaliacoes(portfolioData.id)
     }
 
     setCarregando(false)
   }
 
-  const handleSeguir = async () => {
-    if (!user) { toast.error('Faça login para seguir'); return }
+  const carregarAvaliacoes = async (pId: string) => {
+    const { data } = await supabase
+      .from('carteira_avaliacoes')
+      .select('*, profiles:user_id(nome, username, foto_url)')
+      .eq('portfolio_id', pId)
+      .order('created_at', { ascending: false })
+    const lista = (data as Avaliacao[]) ?? []
+    setAvaliacoes(lista)
+    const media = lista.length ? lista.reduce((s, a) => s + a.nota, 0) / lista.length : 0
+    setNotaMedia(media)
+    if (user) {
+      const minha = lista.find((a) => a.user_id === user.id) ?? null
+      setMinhaAvalia(minha)
+      if (minha) { setNovaNota(minha.nota); setNovoComentario(minha.comentario ?? '') }
+    }
+  }
 
+  const handleSeguir = async () => {
+    if (!user) { toast.error('Faça login'); return }
     if (jaSigo) {
-      await supabase.from('followers').delete()
-        .eq('follower_id', user.id).eq('following_id', userId)
+      await supabase.from('followers').delete().eq('follower_id', user.id).eq('following_id', userId)
       setJaSigo(false)
       setSeguidores((s) => s - 1)
+      toast.success(`Deixou de seguir @${perfil?.username}`)
     } else {
-      await supabase.from('followers').insert({
-        follower_id:  user.id,
-        following_id: userId,
-      })
+      await supabase.from('followers').insert({ follower_id: user.id, following_id: userId })
       setJaSigo(true)
       setSeguidores((s) => s + 1)
       toast.success(`Seguindo @${perfil?.username}!`)
@@ -101,11 +145,45 @@ export default function PerfilPage() {
     }
   }
 
+  const handleAvaliar = async () => {
+    if (!user || !portfolioId) return
+    if (novaNota === 0) { toast.error('Selecione uma nota de 1 a 5'); return }
+    setEnviandoAvalia(true)
+
+    if (minhaAvalia) {
+      await supabase.from('carteira_avaliacoes')
+        .update({ nota: novaNota, comentario: novoComentario.trim() || null })
+        .eq('id', minhaAvalia.id)
+      toast.success('Avaliação atualizada!')
+    } else {
+      await supabase.from('carteira_avaliacoes').insert({
+        portfolio_id: portfolioId,
+        user_id:      user.id,
+        nota:         novaNota,
+        comentario:   novoComentario.trim() || null,
+      })
+      toast.success('Avaliação enviada! ⭐')
+    }
+
+    setEnviandoAvalia(false)
+    carregarAvaliacoes(portfolioId)
+  }
+
+  const handleDeletarAvaliacao = async () => {
+    if (!minhaAvalia || !portfolioId) return
+    await supabase.from('carteira_avaliacoes').delete().eq('id', minhaAvalia.id)
+    setMinhaAvalia(null)
+    setNovaNota(0)
+    setNovoComentario('')
+    toast.success('Avaliação removida')
+    carregarAvaliacoes(portfolioId)
+  }
+
   if (carregando) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="card p-10 animate-pulse">
-          <div className="flex gap-4 mb-4">
+        <div className="card p-8 animate-pulse">
+          <div className="flex items-center gap-4 mb-6">
             <div className="w-20 h-20 rounded-full bg-brand-surface" />
             <div className="flex-1">
               <div className="h-4 bg-brand-surface rounded w-40 mb-2" />
@@ -117,116 +195,62 @@ export default function PerfilPage() {
     )
   }
 
-  if (!perfil) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="card p-10 text-center">
-          <p className="text-brand-muted">Usuário não encontrado</p>
-        </div>
-      </div>
-    )
-  }
-
-  const abas: { id: Aba; label: string }[] = [
-    { id: 'posts',    label: 'Movimentações' },
-    { id: 'teses',    label: 'Teses'         },
-    { id: 'carteira', label: 'Carteira'      },
-  ]
+  if (!perfil) return (
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="card p-10 text-center"><p className="text-brand-muted">Perfil não encontrado</p></div>
+    </div>
+  )
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      {/* Header do perfil */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="card p-6 mb-4"
-      >
-        <div className="flex items-start gap-4">
-          {/* Avatar */}
-          <div className="w-20 h-20 rounded-full bg-brand-surface border-2 border-brand-border overflow-hidden shrink-0">
-            {perfil.foto_url ? (
-              <img src={perfil.foto_url} alt={perfil.nome} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-brand-muted">
-                {perfil.nome[0].toUpperCase()}
+    <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+
+      {/* Card do perfil */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-full bg-brand-surface border-2 border-brand-border overflow-hidden">
+              {perfil.foto_url
+                ? <img src={perfil.foto_url} alt={perfil.nome} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-brand-muted">{perfil.nome[0].toUpperCase()}</div>
+              }
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">{perfil.nome}</h1>
+              <p className="text-brand-muted text-sm">@{perfil.username}</p>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {perfil.localizacao && <span className="flex items-center gap-1 text-xs text-brand-muted"><MapPin size={11} />{perfil.localizacao}</span>}
+                {perfil.idade && <span className="flex items-center gap-1 text-xs text-brand-muted"><Calendar size={11} />{perfil.idade} anos</span>}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h1 className="text-lg font-bold text-white truncate">{perfil.nome}</h1>
-                <p className="text-brand-muted text-sm">@{perfil.username}</p>
-              </div>
-
-              {/* Botão seguir / editar */}
-              {ehMeuPerfil ? (
-                <button
-                  onClick={() => router.push('/main/editar')}
-                  className="btn-outline flex items-center gap-1.5 text-sm py-1.5 px-3"
-                >
-                  <Edit3 size={13} />
-                  Editar
-                </button>
-              ) : (
-                <button
-                  onClick={handleSeguir}
-                  className={`flex items-center gap-1.5 text-sm py-1.5 px-3 rounded-xl border font-medium transition-all ${
-                    jaSigo
-                      ? 'border-brand-border text-brand-muted hover:border-red-400 hover:text-red-400'
-                      : 'border-brand-green bg-brand-green/10 text-brand-green hover:bg-brand-green hover:text-brand-dark'
-                  }`}
-                >
-                  {jaSigo ? <><UserCheck size={14} /> Seguindo</> : <><UserPlus size={14} /> Seguir</>}
-                </button>
-              )}
-            </div>
-
-            {/* Meta info */}
-            <div className="flex flex-wrap gap-3 mt-2">
-              {perfil.pais && (
-                <span className="flex items-center gap-1 text-xs text-brand-muted">
-                  <MapPin size={11} /> {perfil.pais}
-                </span>
-              )}
-              {perfil.idade && (
-                <span className="flex items-center gap-1 text-xs text-brand-muted">
-                  <Calendar size={11} /> {perfil.idade} anos
-                </span>
-              )}
-            </div>
-
-            {/* Bio */}
-            {perfil.bio && (
-              <p className="text-sm text-gray-300 mt-2 leading-relaxed">{perfil.bio}</p>
-            )}
-          </div>
+          {ehMeuPerfil
+            ? <button onClick={() => router.push('/main/editar')} className="btn-outline flex items-center gap-1.5 text-sm"><Edit3 size={14} /> Editar</button>
+            : (
+              <button onClick={handleSeguir} className={`flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border transition-all ${jaSigo ? 'border-brand-border text-brand-muted hover:border-red-400 hover:text-red-400' : 'border-brand-green bg-brand-green/10 text-brand-green hover:bg-brand-green hover:text-brand-dark'}`}>
+                {jaSigo ? <><UserCheck size={14} /> Seguindo</> : <><UserPlus size={14} /> Seguir</>}
+              </button>
+            )
+          }
         </div>
+
+        {perfil.bio && <p className="text-sm text-gray-300 mb-4">{perfil.bio}</p>}
 
         {/* Contadores */}
         <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-brand-border">
           {[
-            { label: 'Posts',      valor: totalPosts,  href: null                                   },
-            { label: 'Seguidores', valor: seguidores,  href: `/main/perfil/${userId}/seguidores`    },
-            { label: 'Seguindo',   valor: seguindo,    href: `/main/perfil/${userId}/seguindo`      },
+            { label: 'Posts',      valor: totalPosts, href: null },
+            { label: 'Seguidores', valor: seguidores, href: `/main/perfil/${userId}/seguidores` },
+            { label: 'Seguindo',   valor: seguindo,   href: `/main/perfil/${userId}/seguindo`   },
           ].map(({ label, valor, href }) => (
             <div key={label} className="text-center">
               {href ? (
                 <Link href={href} className="group block">
-                  <p className="text-xl font-bold text-white group-hover:text-brand-green transition-colors">
-                    {formatarNumero(valor)}
-                  </p>
-                  <p className="text-xs text-brand-muted mt-0.5 group-hover:text-brand-green transition-colors">
-                    {label}
-                  </p>
+                  <p className="text-xl font-bold text-white group-hover:text-brand-green transition-colors">{formatarNumero(valor)}</p>
+                  <p className="text-xs text-brand-muted mt-0.5 group-hover:text-brand-green transition-colors">{label}</p>
                 </Link>
               ) : (
-                <>
-                  <p className="text-xl font-bold text-white">{formatarNumero(valor)}</p>
-                  <p className="text-xs text-brand-muted mt-0.5">{label}</p>
-                </>
+                <><p className="text-xl font-bold text-white">{formatarNumero(valor)}</p><p className="text-xs text-brand-muted mt-0.5">{label}</p></>
               )}
             </div>
           ))}
@@ -234,94 +258,139 @@ export default function PerfilPage() {
       </motion.div>
 
       {/* Abas */}
-      <div className="flex gap-1 mb-4 bg-brand-card rounded-xl p-1 border border-brand-border">
-        {abas.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setAbaAtiva(id)}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-              abaAtiva === id
-                ? 'bg-brand-green text-brand-dark'
-                : 'text-brand-muted hover:text-white'
-            }`}
+      <div className="card p-1 flex gap-1">
+        {(['movimentacao', 'tese', 'carteira'] as const).map((aba) => (
+          <button key={aba} onClick={() => setAbaAtiva(aba)}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all capitalize ${abaAtiva === aba ? 'bg-brand-green text-brand-dark' : 'text-brand-muted hover:text-white'}`}
           >
-            {label}
+            {aba === 'movimentacao' ? 'Movimentações' : aba === 'tese' ? 'Teses' : 'Carteira'}
           </button>
         ))}
       </div>
 
       {/* Conteúdo das abas */}
-      {abaAtiva === 'posts' && (
-        <PerfilFeedList profileUserId={userId} tipo="movimentacao" />
-      )}
-
-      {abaAtiva === 'teses' && (
-        <PerfilFeedList profileUserId={userId} tipo="tese" />
-      )}
+      {abaAtiva !== 'carteira' && <PerfilFeedList userId={userId} tipo={abaAtiva} />}
 
       {abaAtiva === 'carteira' && (
         <div className="space-y-4">
           {carteira.length > 0 ? (
             <>
               {/* Gráfico */}
-              <div className="card p-6">
-                <p className="text-sm text-brand-muted mb-4">Distribuição proporcional da carteira</p>
-                <CarteiraChart
-                  assets={carteira.map((a) => ({
-                    classe:     a.classe as AssetClasse,
-                    nome:       a.nome,
-                    percentual: a.percentual,
-                  }))}
-                />
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-brand-muted">Distribuição proporcional</p>
+                  {notaMedia > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Estrelas nota={Math.round(notaMedia)} tamanho={14} />
+                      <span className="text-sm font-bold text-yellow-400">{notaMedia.toFixed(1)}</span>
+                      <span className="text-xs text-brand-muted">({avaliacoes.length})</span>
+                    </div>
+                  )}
+                </div>
+                <CarteiraChart assets={carteira.map((a) => ({ classe: a.classe as AssetClasse, nome: a.nome, percentual: a.percentual }))} />
               </div>
 
               {/* Lista de ativos */}
               <div className="card p-5">
                 <p className="text-sm font-semibold text-white mb-4">
                   Composição da carteira
-                  <span className="text-brand-muted font-normal text-xs ml-2">
-                    ({carteira.length} ativo{carteira.length !== 1 ? 's' : ''})
-                  </span>
+                  <span className="text-brand-muted font-normal text-xs ml-2">({carteira.length} ativo{carteira.length !== 1 ? 's' : ''})</span>
                 </p>
                 <div className="space-y-2">
-                  {[...carteira]
-                    .sort((a, b) => b.percentual - a.percentual)
-                    .map((ativo) => (
-                      <div key={ativo.id} className="flex items-center gap-3 py-2 border-b border-brand-border/40 last:border-0">
-                        <div
-                          className="w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: ASSET_CLASSE_COLORS[ativo.classe as AssetClasse] }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-white font-medium truncate">{ativo.nome}</span>
-                            {ativo.ticker && (
-                              <span className="text-xs text-brand-muted bg-brand-surface px-1.5 py-0.5 rounded shrink-0">
-                                {ativo.ticker}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-brand-muted">
-                            {ASSET_CLASSE_LABELS[ativo.classe as AssetClasse]}
-                          </span>
+                  {[...carteira].sort((a, b) => b.percentual - a.percentual).map((ativo) => (
+                    <div key={ativo.id} className="flex items-center gap-3 py-2 border-b border-brand-border/40 last:border-0">
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: ASSET_CLASSE_COLORS[ativo.classe as AssetClasse] }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-white font-medium truncate">{ativo.nome}</span>
+                          {ativo.ticker && <span className="text-xs text-brand-muted bg-brand-surface px-1.5 py-0.5 rounded shrink-0">{ativo.ticker}</span>}
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm font-bold text-brand-green">{ativo.percentual.toFixed(1)}%</p>
-                          {/* Barra de proporção */}
-                          <div className="w-16 h-1 bg-brand-surface rounded-full mt-1">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${ativo.percentual}%`,
-                                backgroundColor: ASSET_CLASSE_COLORS[ativo.classe as AssetClasse]
-                              }}
-                            />
-                          </div>
+                        <span className="text-xs text-brand-muted">{ASSET_CLASSE_LABELS[ativo.classe as AssetClasse]}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-brand-green">{ativo.percentual.toFixed(1)}%</p>
+                        <div className="w-16 h-1 bg-brand-surface rounded-full mt-1">
+                          <div className="h-full rounded-full" style={{ width: `${ativo.percentual}%`, backgroundColor: ASSET_CLASSE_COLORS[ativo.classe as AssetClasse] }} />
                         </div>
                       </div>
-                    ))
-                  }
+                    </div>
+                  ))}
                 </div>
+              </div>
+
+              {/* ── AVALIAÇÕES ── */}
+              <div className="card p-5">
+                <p className="text-sm font-semibold text-white mb-4">
+                  Avaliações da carteira
+                  {notaMedia > 0 && (
+                    <span className="ml-2 text-yellow-400 font-bold">⭐ {notaMedia.toFixed(1)}</span>
+                  )}
+                </p>
+
+                {/* Formulário — só para quem não é dono */}
+                {user && !ehMeuPerfil && (
+                  <div className="bg-brand-surface rounded-xl p-4 mb-4 border border-brand-border">
+                    <p className="text-xs text-brand-muted mb-3">
+                      {minhaAvalia ? 'Sua avaliação:' : 'Avalie esta carteira:'}
+                    </p>
+                    <Estrelas nota={novaNota} tamanho={24} interativo onChange={setNovaNota} />
+                    <input
+                      type="text"
+                      value={novoComentario}
+                      onChange={(e) => setNovoComentario(e.target.value)}
+                      placeholder="Deixe um comentário (opcional)"
+                      maxLength={200}
+                      className="input text-sm mt-3 w-full"
+                    />
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={handleAvaliar} disabled={enviandoAvalia || novaNota === 0}
+                        className="btn-primary flex items-center gap-1.5 text-sm flex-1 justify-center disabled:opacity-50"
+                      >
+                        {enviandoAvalia
+                          ? <div className="w-4 h-4 border-2 border-brand-dark border-t-transparent rounded-full animate-spin" />
+                          : <><Send size={13} /> {minhaAvalia ? 'Atualizar' : 'Enviar avaliação'}</>
+                        }
+                      </button>
+                      {minhaAvalia && (
+                        <button onClick={handleDeletarAvaliacao} className="p-2 text-brand-muted hover:text-red-400 transition-colors rounded-xl hover:bg-red-500/10">
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de avaliações */}
+                {avaliacoes.length === 0 ? (
+                  <p className="text-center text-brand-muted text-sm py-4">
+                    {ehMeuPerfil ? 'Nenhuma avaliação ainda.' : 'Seja o primeiro a avaliar!'}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {avaliacoes.map((a) => (
+                      <motion.div key={a.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                        className="flex gap-3 py-2 border-b border-brand-border/40 last:border-0"
+                      >
+                        <Link href={`/main/perfil/${a.user_id}`}>
+                          <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
+                            {a.profiles?.foto_url
+                              ? <img src={a.profiles.foto_url} alt={a.profiles.nome} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-brand-muted">{a.profiles?.nome?.[0]?.toUpperCase()}</div>
+                            }
+                          </div>
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-white">{a.profiles?.nome}</span>
+                            <Estrelas nota={a.nota} tamanho={12} />
+                            <span className="text-xs text-brand-muted ml-auto">{tempoRelativo(a.created_at)}</span>
+                          </div>
+                          {a.comentario && <p className="text-xs text-gray-300">{a.comentario}</p>}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           ) : (
