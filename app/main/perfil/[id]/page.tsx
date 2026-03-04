@@ -218,8 +218,8 @@ export default function PerfilPage() {
               <h1 className="text-xl font-bold text-white">{perfil.nome}</h1>
               <p className="text-brand-muted text-sm">@{perfil.username}</p>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                {perfil.localizacao && <span className="flex items-center gap-1 text-xs text-brand-muted"><MapPin size={11} />{perfil.localizacao}</span>}
-                {perfil.idade && <span className="flex items-center gap-1 text-xs text-brand-muted"><Calendar size={11} />{perfil.idade} anos</span>}
+                {(perfil as any).localizacao && <span className="flex items-center gap-1 text-xs text-brand-muted"><MapPin size={11} />{(perfil as any).localizacao}</span>}
+                {(perfil as any).idade && <span className="flex items-center gap-1 text-xs text-brand-muted"><Calendar size={11} />{(perfil as any).idade} anos</span>}
               </div>
             </div>
           </div>
