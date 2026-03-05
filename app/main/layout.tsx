@@ -197,18 +197,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             <div className="border-t border-brand-border my-1" />
 
-            <Link href="/main/chat"
+            <Link href="/main/carteira"
               className="flex items-center gap-3 px-4 py-3 text-sm text-brand-muted hover:text-white hover:bg-brand-surface rounded-xl transition-colors"
             >
-              <div className="relative">
-                <MessageCircle size={16} />
-                {msgNaoLidas > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-brand-green text-brand-dark text-[8px] font-bold rounded-full flex items-center justify-center">
-                    {msgNaoLidas}
-                  </span>
-                )}
-              </div>
-              Mensagens {msgNaoLidas > 0 && <span className="ml-auto text-brand-green text-xs font-bold">{msgNaoLidas}</span>}
+              <PieChart size={16} /> Carteira
             </Link>
 
             <div className="border-t border-brand-border my-1" />
@@ -246,9 +238,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <span className="text-[10px] font-medium">Publicar</span>
           </Link>
 
-          <Link href="/main/carteira" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/carteira') ? 'text-brand-green' : 'text-brand-muted')}>
-            <PieChart size={20} />
-            <span className="text-[10px] font-medium">Carteira</span>
+          <Link href="/main/chat" className={cn('relative flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/chat') ? 'text-brand-green' : 'text-brand-muted')}>
+            <MessageCircle size={20} />
+            {msgNaoLidas > 0 && (
+              <span className="absolute top-1 right-0 w-4 h-4 bg-brand-green text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center">
+                {msgNaoLidas > 9 ? '9+' : msgNaoLidas}
+              </span>
+            )}
+            <span className="text-[10px] font-medium">Mensagens</span>
           </Link>
 
           {/* Mais (...) */}
