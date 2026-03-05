@@ -24,18 +24,20 @@ export type Conversation = {
 
 export function useChat() {
   const { user } = useAuth()
-  const [conversas,    setConversas]    = useState<Conversation[]>([])
-  const [loading,      setLoading]      = useState(true)
+  const [conversas,     setConversas]     = useState<Conversation[]>([])
+  const [loading,       setLoading]       = useState(true)
   const [totalNaoLidas, setTotalNaoLidas] = useState(0)
 
   useEffect(() => {
     if (!user) return
     carregarConversas()
 
-    // Realtime: atualiza lista ao receber nova mensagem
     const channel = supabase
       .channel('messages-list')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+        carregarConversas()
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => {
         carregarConversas()
       })
       .subscribe()
@@ -67,7 +69,7 @@ export function useChat() {
 
         return {
           ...conv,
-          outro:     perfil as any,
+          outro:      perfil as any,
           ultima_msg: msgs?.[0]?.conteudo ?? null,
           nao_lidas:  naoLidas ?? 0,
         }
@@ -82,7 +84,6 @@ export function useChat() {
   const iniciarConversa = async (outroUserId: string): Promise<string | null> => {
     if (!user) return null
 
-    // Verifica se já existe
     const { data: existente } = await supabase
       .from('conversations')
       .select('id')
@@ -91,7 +92,6 @@ export function useChat() {
 
     if (existente) return existente.id
 
-    // Cria nova
     const { data: nova } = await supabase
       .from('conversations')
       .insert({ user1_id: user.id, user2_id: outroUserId })
@@ -156,6 +156,11 @@ export function useMensagens(conversationId: string | null) {
       .eq('conversation_id', conversationId)
       .eq('lida', false)
       .neq('sender_id', user.id)
+    // Força atualização do badge na navbar
+    await supabase
+      .from('conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', conversationId)
   }
 
   const enviarMensagem = async (conteudo: string) => {
@@ -168,6 +173,7 @@ export function useMensagens(conversationId: string | null) {
       conteudo:        conteudo.trim(),
     }).select().single()
 
+    // Adiciona imediatamente na tela sem esperar o Realtime
     if (novaMsg) {
       setMensagens((prev) => [...prev, novaMsg as Message])
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
@@ -179,7 +185,7 @@ export function useMensagens(conversationId: string | null) {
       .eq('id', conversationId)
 
     setEnviando(false)
-  }                          // ← fecha enviarMensagem
+  }
 
   return { mensagens, loading, enviando, enviarMensagem, bottomRef }
-}                            // ← fecha useMensagens
+}
