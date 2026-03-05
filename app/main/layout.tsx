@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, User, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X, MessageCircle } from 'lucide-react'
+import { Home, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X, MessageCircle, Heart, MessageSquare, UserPlus } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotificacoes } from '@/hooks/useNotificacoes'
 import { useChat } from '@/hooks/useChat'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { motion, AnimatePresence } from 'framer-motion'
 
 const NAV_ITEMS_DESKTOP = [
   { href: '/main/feed',     icon: Home,       label: 'Feed'     },
@@ -16,7 +18,6 @@ const NAV_ITEMS_DESKTOP = [
   { href: '/main/noticias', icon: Newspaper,  label: 'Notícias' },
   { href: '/main/publicar', icon: PlusSquare, label: 'Publicar' },
   { href: '/main/carteira', icon: PieChart,   label: 'Carteira' },
-  { href: '/main/perfil',   icon: User,       label: 'Perfil'   },
 ]
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +25,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const { user, profile, loading, signOut } = useAuth()
   const { naoLidas } = useNotificacoes()
-  const { totalNaoLidas: msgNaoLidas } = useChat()
+  const { totalNaoLidas: msgNaoLidas, recarregar: recarregarChat } = useChat()
   const [menuAberto, setMenuAberto] = useState(false)
 
   useEffect(() => {
@@ -32,6 +33,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }, [user, loading, router])
 
   useEffect(() => { setMenuAberto(false) }, [pathname])
+
+  useEffect(() => {
+    const interval = setInterval(() => recarregarChat(), 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading) {
     return (
@@ -50,6 +56,44 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-brand-dark">
+
+      {/* ── HEADER NOTIFICAÇÕES MOBILE (topo fixo) ─────────── */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-brand-dark/95 backdrop-blur-sm border-b border-brand-border h-12 flex items-center justify-between px-4">
+        {/* Logo */}
+        <Link href="/main/feed" className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-brand-green rounded-lg flex items-center justify-center">
+            <TrendingUp size={12} className="text-brand-dark" />
+          </div>
+          <span className="text-base font-bold text-white">Investagram</span>
+        </Link>
+
+        {/* Sino de notificações */}
+        <Link
+          href="/main/notificacoes"
+          className={cn(
+            'relative flex items-center justify-center w-9 h-9 rounded-xl transition-colors',
+            pathname.startsWith('/main/notificacoes')
+              ? 'text-brand-green bg-brand-green/10'
+              : naoLidas > 0
+                ? 'text-brand-green'
+                : 'text-brand-muted hover:text-white'
+          )}
+        >
+          {/* Sino pulsa levemente quando tem notificação */}
+          <motion.div
+            animate={naoLidas > 0 ? { rotate: [0, -15, 15, -10, 10, 0] } : {}}
+            transition={{ duration: 0.5, repeat: naoLidas > 0 ? Infinity : 0, repeatDelay: 3 }}
+          >
+            <Bell size={20} />
+          </motion.div>
+
+          {naoLidas > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {naoLidas > 9 ? '9+' : naoLidas}
+            </span>
+          )}
+        </Link>
+      </header>
 
       {/* ── HEADER DESKTOP ─────────────────────────────────── */}
       <header className="hidden md:flex fixed top-0 left-0 right-0 z-50 bg-brand-dark/90 backdrop-blur-sm border-b border-brand-border h-14 items-center px-6">
@@ -78,13 +122,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </nav>
 
         <div className="flex items-center gap-2">
-
-          {/* Chat desktop */}
           <Link href="/main/chat"
             className={cn('relative p-2 rounded-xl transition-colors',
-              pathname.startsWith('/main/chat')
-                ? 'text-brand-green bg-brand-green/10'
-                : 'text-brand-muted hover:text-white hover:bg-brand-surface'
+              pathname.startsWith('/main/chat') ? 'text-brand-green bg-brand-green/10' : 'text-brand-muted hover:text-white hover:bg-brand-surface'
             )}
           >
             <MessageCircle size={18} />
@@ -95,12 +135,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             )}
           </Link>
 
-          {/* Notificações desktop */}
           <Link href="/main/notificacoes"
             className={cn('relative p-2 rounded-xl transition-colors',
-              pathname.startsWith('/main/notificacoes')
-                ? 'text-brand-green bg-brand-green/10'
-                : 'text-brand-muted hover:text-white hover:bg-brand-surface'
+              pathname.startsWith('/main/notificacoes') ? 'text-brand-green bg-brand-green/10' : 'text-brand-muted hover:text-white hover:bg-brand-surface'
             )}
           >
             <Bell size={18} />
@@ -129,7 +166,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </div>
       </header>
 
-      <main className="md:pt-14 pb-20 md:pb-0">
+      {/* Espaço para o header mobile no topo */}
+      <main className="pt-12 md:pt-14 pb-20 md:pb-0">
         {children}
       </main>
 
@@ -158,12 +196,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </Link>
 
             <div className="border-t border-brand-border my-1" />
-
-            <Link href="/main/carteira"
-              className="flex items-center gap-3 px-4 py-3 text-sm text-brand-muted hover:text-white hover:bg-brand-surface rounded-xl transition-colors"
-            >
-              <PieChart size={16} /> Carteira
-            </Link>
 
             <Link href="/main/chat"
               className="flex items-center gap-3 px-4 py-3 text-sm text-brand-muted hover:text-white hover:bg-brand-surface rounded-xl transition-colors"
@@ -214,23 +246,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <span className="text-[10px] font-medium">Publicar</span>
           </Link>
 
-          {/* Chat mobile com badge */}
-          <Link href="/main/chat" className={cn('relative flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/chat') ? 'text-brand-green' : 'text-brand-muted')}>
-            <MessageCircle size={20} />
-            {msgNaoLidas > 0 && (
-              <span className="absolute top-1 right-0.5 w-4 h-4 bg-brand-green text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center">
-                {msgNaoLidas > 9 ? '9+' : msgNaoLidas}
-              </span>
-            )}
-            <span className="text-[10px] font-medium">Chat</span>
+          <Link href="/main/carteira" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/carteira') ? 'text-brand-green' : 'text-brand-muted')}>
+            <PieChart size={20} />
+            <span className="text-[10px] font-medium">Carteira</span>
           </Link>
 
           {/* Mais (...) */}
           <button
             onClick={() => setMenuAberto(!menuAberto)}
-            className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', menuAberto ? 'text-brand-green' : 'text-brand-muted')}
+            className={cn('relative flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', menuAberto ? 'text-brand-green' : 'text-brand-muted')}
           >
             {menuAberto ? <X size={20} /> : <MoreHorizontal size={20} />}
+            {!menuAberto && msgNaoLidas > 0 && (
+              <span className="absolute top-1 right-0 w-4 h-4 bg-brand-green text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center">
+                {msgNaoLidas > 9 ? '9+' : msgNaoLidas}
+              </span>
+            )}
             <span className="text-[10px] font-medium">Mais</span>
           </button>
 
