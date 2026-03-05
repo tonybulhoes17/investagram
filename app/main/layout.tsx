@@ -4,18 +4,19 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, User, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X } from 'lucide-react'
+import { Home, User, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X, MessageCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotificacoes } from '@/hooks/useNotificacoes'
+import { useChat } from '@/hooks/useChat'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS_DESKTOP = [
-  { href: '/main/feed',         icon: Home,       label: 'Feed'     },
-  { href: '/main/busca',        icon: Search,     label: 'Buscar'   },
-  { href: '/main/noticias',     icon: Newspaper,  label: 'Notícias' },
-  { href: '/main/publicar',     icon: PlusSquare, label: 'Publicar' },
-  { href: '/main/carteira',     icon: PieChart,   label: 'Carteira' },
-  { href: '/main/perfil',       icon: User,       label: 'Perfil'   },
+  { href: '/main/feed',     icon: Home,       label: 'Feed'     },
+  { href: '/main/busca',    icon: Search,     label: 'Buscar'   },
+  { href: '/main/noticias', icon: Newspaper,  label: 'Notícias' },
+  { href: '/main/publicar', icon: PlusSquare, label: 'Publicar' },
+  { href: '/main/carteira', icon: PieChart,   label: 'Carteira' },
+  { href: '/main/perfil',   icon: User,       label: 'Perfil'   },
 ]
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -23,13 +24,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const { user, profile, loading, signOut } = useAuth()
   const { naoLidas } = useNotificacoes()
+  const { totalNaoLidas: msgNaoLidas } = useChat()
   const [menuAberto, setMenuAberto] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) router.replace('/auth/login')
   }, [user, loading, router])
 
-  // Fecha menu ao navegar
   useEffect(() => { setMenuAberto(false) }, [pathname])
 
   if (loading) {
@@ -77,6 +78,24 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </nav>
 
         <div className="flex items-center gap-2">
+
+          {/* Chat desktop */}
+          <Link href="/main/chat"
+            className={cn('relative p-2 rounded-xl transition-colors',
+              pathname.startsWith('/main/chat')
+                ? 'text-brand-green bg-brand-green/10'
+                : 'text-brand-muted hover:text-white hover:bg-brand-surface'
+            )}
+          >
+            <MessageCircle size={18} />
+            {msgNaoLidas > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-green text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center">
+                {msgNaoLidas > 9 ? '9+' : msgNaoLidas}
+              </span>
+            )}
+          </Link>
+
+          {/* Notificações desktop */}
           <Link href="/main/notificacoes"
             className={cn('relative p-2 rounded-xl transition-colors',
               pathname.startsWith('/main/notificacoes')
@@ -116,20 +135,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       {/* ── OVERLAY DO MENU "..." ───────────────────────────── */}
       {menuAberto && (
-        <div
-          className="md:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setMenuAberto(false)}
-        />
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMenuAberto(false)} />
       )}
 
       {/* ── MENU "..." EXPANDIDO ────────────────────────────── */}
       {menuAberto && (
         <div className="md:hidden fixed bottom-16 right-0 z-50 w-52 bg-brand-card border border-brand-border rounded-tl-2xl shadow-xl overflow-hidden">
           <div className="p-1">
-
-            {/* Avatar + nome */}
-            <Link
-              href={`/main/perfil/${profile?.id}`}
+            <Link href={`/main/perfil/${profile?.id}`}
               className="flex items-center gap-3 px-4 py-3 hover:bg-brand-surface rounded-xl transition-colors"
             >
               <div className="w-9 h-9 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
@@ -146,26 +159,33 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             <div className="border-t border-brand-border my-1" />
 
-            {/* Carteira */}
-            <Link
-              href="/main/carteira"
+            <Link href="/main/carteira"
               className="flex items-center gap-3 px-4 py-3 text-sm text-brand-muted hover:text-white hover:bg-brand-surface rounded-xl transition-colors"
             >
-              <PieChart size={16} />
-              Carteira
+              <PieChart size={16} /> Carteira
+            </Link>
+
+            <Link href="/main/chat"
+              className="flex items-center gap-3 px-4 py-3 text-sm text-brand-muted hover:text-white hover:bg-brand-surface rounded-xl transition-colors"
+            >
+              <div className="relative">
+                <MessageCircle size={16} />
+                {msgNaoLidas > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-brand-green text-brand-dark text-[8px] font-bold rounded-full flex items-center justify-center">
+                    {msgNaoLidas}
+                  </span>
+                )}
+              </div>
+              Mensagens {msgNaoLidas > 0 && <span className="ml-auto text-brand-green text-xs font-bold">{msgNaoLidas}</span>}
             </Link>
 
             <div className="border-t border-brand-border my-1" />
 
-            {/* Sair */}
-            <button
-              onClick={handleLogout}
+            <button onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
             >
-              <LogOut size={16} />
-              Sair da conta
+              <LogOut size={16} /> Sair da conta
             </button>
-
           </div>
         </div>
       )}
@@ -174,39 +194,35 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-brand-card border-t border-brand-border">
         <div className="flex items-center justify-around h-16">
 
-          {/* Feed */}
           <Link href="/main/feed" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/feed') ? 'text-brand-green' : 'text-brand-muted')}>
             <Home size={20} />
             <span className="text-[10px] font-medium">Feed</span>
           </Link>
 
-          {/* Buscar */}
           <Link href="/main/busca" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/busca') ? 'text-brand-green' : 'text-brand-muted')}>
             <Search size={20} />
             <span className="text-[10px] font-medium">Buscar</span>
           </Link>
 
-          {/* Notícias */}
           <Link href="/main/noticias" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/noticias') ? 'text-brand-green' : 'text-brand-muted')}>
             <Newspaper size={20} />
             <span className="text-[10px] font-medium">Notícias</span>
           </Link>
 
-          {/* Publicar */}
           <Link href="/main/publicar" className={cn('flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/publicar') ? 'text-brand-green' : 'text-brand-muted')}>
             <PlusSquare size={20} />
             <span className="text-[10px] font-medium">Publicar</span>
           </Link>
 
-          {/* Alertas */}
-          <Link href="/main/notificacoes" className={cn('relative flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/notificacoes') ? 'text-brand-green' : 'text-brand-muted')}>
-            <Bell size={20} />
-            {naoLidas > 0 && (
-              <span className="absolute top-1 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {naoLidas > 9 ? '9+' : naoLidas}
+          {/* Chat mobile com badge */}
+          <Link href="/main/chat" className={cn('relative flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-colors', pathname.startsWith('/main/chat') ? 'text-brand-green' : 'text-brand-muted')}>
+            <MessageCircle size={20} />
+            {msgNaoLidas > 0 && (
+              <span className="absolute top-1 right-0.5 w-4 h-4 bg-brand-green text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center">
+                {msgNaoLidas > 9 ? '9+' : msgNaoLidas}
               </span>
             )}
-            <span className="text-[10px] font-medium">Alertas</span>
+            <span className="text-[10px] font-medium">Chat</span>
           </Link>
 
           {/* Mais (...) */}
