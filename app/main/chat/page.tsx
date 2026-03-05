@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { MessageCircle, Send, ArrowLeft, Search } from 'lucide-react'
 import { useChat, useMensagens } from '@/hooks/useChat'
 import { useAuth } from '@/hooks/useAuth'
@@ -26,7 +26,6 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
-      {/* Header da conversa */}
       <div className="flex items-center gap-3 p-4 border-b border-brand-border bg-brand-card">
         <button onClick={onVoltar} className="p-1.5 text-brand-muted hover:text-white transition-colors md:hidden">
           <ArrowLeft size={18} />
@@ -47,7 +46,6 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
         )}
       </div>
 
-      {/* Mensagens */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {loading && (
           <div className="flex justify-center py-8">
@@ -73,7 +71,6 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
 
           return (
             <div key={msg.id}>
-              {/* Separador de data */}
               {mostrarData && (
                 <div className="flex items-center gap-2 my-3">
                   <div className="flex-1 h-px bg-brand-border" />
@@ -83,7 +80,6 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
                   <div className="flex-1 h-px bg-brand-border" />
                 </div>
               )}
-
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -107,7 +103,6 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div className="p-4 border-t border-brand-border bg-brand-card">
         <div className="flex items-center gap-2">
           <input
@@ -231,22 +226,30 @@ function ListaConversas({ conversaAtiva, onSelecionar }: {
 
 // ── Página principal do Chat ─────────────────────────────────
 export default function ChatPage() {
-  const searchParams  = useSearchParams()
-  const [conversaAtiva, setConversaAtiva] = useState<string | null>(searchParams.get('id'))
-  const { conversas } = useChat()
+  const searchParams = useSearchParams()
+  const { conversas, recarregar, zerarNaoLidas } = useChat()
+  const [conversaAtiva, setConversaAtiva] = useState<string | null>(null)
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  // Abre conversa direto se vier ?id= na URL
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (id) handleSelecionar(id)
+  }, [])
+
+  const handleSelecionar = (id: string) => {
+    setConversaAtiva(id)
+    zerarNaoLidas(id)              // zera badge imediatamente
+    setTimeout(() => recarregar(), 800) // recarrega do banco depois
+  }
 
   return (
     <div className="max-w-5xl mx-auto h-[calc(100vh-4rem)]">
       <div className="flex h-full border border-brand-border rounded-xl overflow-hidden bg-brand-card">
 
-        {/* Lista — esconde no mobile quando tem conversa ativa */}
         <div className={cn('w-full md:w-80 border-r border-brand-border shrink-0', conversaAtiva ? 'hidden md:flex md:flex-col' : 'flex flex-col')}>
-          <ListaConversas conversaAtiva={conversaAtiva} onSelecionar={setConversaAtiva} />
+          <ListaConversas conversaAtiva={conversaAtiva} onSelecionar={handleSelecionar} />
         </div>
 
-        {/* Área da conversa */}
         <div className={cn('flex-1', !conversaAtiva ? 'hidden md:flex md:items-center md:justify-center' : 'flex flex-col')}>
           {conversaAtiva ? (
             <TelaConversa conversaId={conversaAtiva} onVoltar={() => setConversaAtiva(null)} />

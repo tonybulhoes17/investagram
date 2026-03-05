@@ -102,7 +102,18 @@ export function useChat() {
     return nova?.id ?? null
   }
 
-  return { conversas, loading, totalNaoLidas, iniciarConversa, recarregar: carregarConversas }
+  // Zera badge imediatamente para uma conversa específica
+  const zerarNaoLidas = (conversationId: string) => {
+    setConversas((prev) => prev.map((c) =>
+      c.id === conversationId ? { ...c, nao_lidas: 0 } : c
+    ))
+    setTotalNaoLidas((prev) => {
+      const conv = conversas.find((c) => c.id === conversationId)
+      return Math.max(0, prev - (conv?.nao_lidas ?? 0))
+    })
+  }
+
+  return { conversas, loading, totalNaoLidas, iniciarConversa, recarregar: carregarConversas, zerarNaoLidas }
 }
 
 export function useMensagens(conversationId: string | null) {
@@ -156,7 +167,6 @@ export function useMensagens(conversationId: string | null) {
       .eq('conversation_id', conversationId)
       .eq('lida', false)
       .neq('sender_id', user.id)
-    // Força atualização do badge na navbar
     await supabase
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
@@ -173,7 +183,6 @@ export function useMensagens(conversationId: string | null) {
       conteudo:        conteudo.trim(),
     }).select().single()
 
-    // Adiciona imediatamente na tela sem esperar o Realtime
     if (novaMsg) {
       setMensagens((prev) => [...prev, novaMsg as Message])
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
