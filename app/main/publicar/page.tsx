@@ -52,7 +52,8 @@ export default function PublicarPage() {
     if (!imagemFile || !user) return null
     setUploadando(true)
     const ext      = imagemFile.name.split('.').pop()
-    const caminho  = `posts/${user.id}/${Date.now()}.${ext}`
+    const nomeArquivo = `${Date.now()}.${ext}`
+    const caminho = `${user.id}/${nomeArquivo}`
     const { error } = await supabase.storage.from('post-images').upload(caminho, imagemFile, { upsert: true })
     setUploadando(false)
     if (error) { toast.error('Erro ao enviar imagem'); return null }
