@@ -159,23 +159,26 @@ export function useMensagens(conversationId: string | null) {
   }
 
   const enviarMensagem = async (conteudo: string) => {
-    if (!user || !conversationId || !conteudo.trim()) return
-    setEnviando(true)
+  if (!user || !conversationId || !conteudo.trim()) return
+  setEnviando(true)
 
-    await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      sender_id:       user.id,
-      conteudo:        conteudo.trim(),
-    })
+  const { data: novaMsg } = await supabase.from('messages').insert({
+    conversation_id: conversationId,
+    sender_id:       user.id,
+    conteudo:        conteudo.trim(),
+  }).select().single()
 
-    // Atualiza updated_at da conversa
-    await supabase
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-
-    setEnviando(false)
+  // Adiciona imediatamente na tela sem esperar o Realtime
+  if (novaMsg) {
+    setMensagens((prev) => [...prev, novaMsg as Message])
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
   }
 
-  return { mensagens, loading, enviando, enviarMensagem, bottomRef }
+  // Atualiza updated_at da conversa
+  await supabase
+    .from('conversations')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', conversationId)
+
+  setEnviando(false)
 }
