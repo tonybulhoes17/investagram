@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, BookOpen, ChevronDown, BarChart2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { TrendingUp, TrendingDown, BookOpen, ChevronDown, BarChart2, ImagePlus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { ASSET_CLASSE_LABELS, AssetClasse } from '@/types'
@@ -19,6 +19,7 @@ const CLASSES = Object.entries(ASSET_CLASSE_LABELS) as [AssetClasse, string][]
 export default function PublicarPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const inputImagemRef = useRef<HTMLInputElement>(null)
 
   const [tipo,        setTipo]        = useState<TipoPost>('movimentacao')
   const [subtipo,     setSubtipo]     = useState<Subtipo>('compra')
@@ -28,12 +29,50 @@ export default function PublicarPage() {
   const [conteudo,    setConteudo]    = useState('')
   const [carregando,  setCarregando]  = useState(false)
 
+  // Imagem
+  const [imagemFile,    setImagemFile]    = useState<File | null>(null)
+  const [imagemPreview, setImagemPreview] = useState<string | null>(null)
+  const [uploadando,    setUploadando]    = useState(false)
+
+  const handleImagemSelecionada = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { toast.error('Imagem muito grande. Máximo 5MB'); return }
+    setImagemFile(file)
+    setImagemPreview(URL.createObjectURL(file))
+  }
+
+  const removerImagem = () => {
+    setImagemFile(null)
+    setImagemPreview(null)
+    if (inputImagemRef.current) inputImagemRef.current.value = ''
+  }
+
+  const uploadImagem = async (): Promise<string | null> => {
+    if (!imagemFile || !user) return null
+    setUploadando(true)
+    const ext      = imagemFile.name.split('.').pop()
+    const caminho  = `posts/${user.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('post-images').upload(caminho, imagemFile, { upsert: true })
+    setUploadando(false)
+    if (error) { toast.error('Erro ao enviar imagem'); return null }
+    const { data } = supabase.storage.from('post-images').getPublicUrl(caminho)
+    return data.publicUrl
+  }
+
   const handlePublicar = async () => {
     if (!user) { toast.error('Faça login para publicar'); return }
     if (tipo === 'movimentacao' && !ativoNome.trim()) { toast.error('Informe o nome do ativo'); return }
     if (tipo === 'tese' && !conteudo.trim()) { toast.error('Escreva o conteúdo da tese'); return }
 
     setCarregando(true)
+
+    // Faz upload da imagem se houver
+    let imagemUrl: string | null = null
+    if (imagemFile) {
+      imagemUrl = await uploadImagem()
+      if (!imagemUrl) { setCarregando(false); return }
+    }
 
     const score = calcularScore({ likes: 0, comments: 0, seguidores_autor: 0, created_at: new Date().toISOString() })
 
@@ -46,6 +85,7 @@ export default function PublicarPage() {
       conteudo:         conteudo.trim() || null,
       data_operacao:    tipo === 'movimentacao' ? dataOp : null,
       score_relevancia: score,
+      imagem_url:       imagemUrl,
     })
 
     setCarregando(false)
@@ -62,10 +102,9 @@ export default function PublicarPage() {
     <div className="max-w-2xl mx-auto px-4 py-6">
       <h1 className="text-xl font-bold text-white mb-6">Nova publicação</h1>
 
-      {/* Seletor de tipo — agora com 3 opções */}
+      {/* Seletor de tipo */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <button
-          onClick={() => setTipo('movimentacao')}
+        <button onClick={() => setTipo('movimentacao')}
           className={`card p-4 text-center transition-all ${tipo === 'movimentacao' ? 'border-brand-green bg-brand-green/5' : 'hover:border-brand-border/80'}`}
         >
           <TrendingUp size={22} className={`mx-auto mb-2 ${tipo === 'movimentacao' ? 'text-brand-green' : 'text-brand-muted'}`} />
@@ -73,8 +112,7 @@ export default function PublicarPage() {
           <p className="text-[10px] text-brand-muted mt-0.5">Compra ou venda</p>
         </button>
 
-        <button
-          onClick={() => setTipo('tese')}
+        <button onClick={() => setTipo('tese')}
           className={`card p-4 text-center transition-all ${tipo === 'tese' ? 'border-purple-500 bg-purple-500/5' : 'hover:border-brand-border/80'}`}
         >
           <BookOpen size={22} className={`mx-auto mb-2 ${tipo === 'tese' ? 'text-purple-400' : 'text-brand-muted'}`} />
@@ -82,8 +120,7 @@ export default function PublicarPage() {
           <p className="text-[10px] text-brand-muted mt-0.5">Análise</p>
         </button>
 
-        <button
-          onClick={() => setTipo('enquete')}
+        <button onClick={() => setTipo('enquete')}
           className={`card p-4 text-center transition-all ${tipo === 'enquete' ? 'border-yellow-500 bg-yellow-500/5' : 'hover:border-brand-border/80'}`}
         >
           <BarChart2 size={22} className={`mx-auto mb-2 ${tipo === 'enquete' ? 'text-yellow-400' : 'text-brand-muted'}`} />
@@ -92,10 +129,8 @@ export default function PublicarPage() {
         </button>
       </div>
 
-      {/* Enquete — usa o componente dedicado */}
       {tipo === 'enquete' && <CriarEnquete />}
 
-      {/* Movimentação ou Tese */}
       {tipo !== 'enquete' && (
         <motion.div key={tipo} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card p-6 space-y-5">
 
@@ -139,6 +174,7 @@ export default function PublicarPage() {
             </>
           )}
 
+          {/* Texto */}
           <div>
             <label className="block text-sm text-brand-muted mb-2">
               {tipo === 'tese' ? 'Tese de investimento *' : 'Comentário / Tese (opcional)'}
@@ -154,9 +190,61 @@ export default function PublicarPage() {
             <p className="text-xs text-brand-muted mt-1 text-right">{conteudo.length}/{tipo === 'tese' ? 2000 : 500}</p>
           </div>
 
-          <button onClick={handlePublicar} disabled={carregando} className="btn-primary w-full">
-            {carregando
-              ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-brand-dark border-t-transparent rounded-full animate-spin" />Publicando...</span>
+          {/* Upload de imagem */}
+          <div>
+            <label className="block text-sm text-brand-muted mb-2">
+              Imagem <span className="text-brand-muted/60">(opcional · máx 5MB)</span>
+            </label>
+
+            <AnimatePresence mode="wait">
+              {imagemPreview ? (
+                <motion.div
+                  key="preview"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  className="relative rounded-xl overflow-hidden border border-brand-border"
+                >
+                  <img src={imagemPreview} alt="Preview" className="w-full max-h-80 object-cover" />
+                  <button
+                    onClick={removerImagem}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="upload"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  type="button"
+                  onClick={() => inputImagemRef.current?.click()}
+                  className="w-full border-2 border-dashed border-brand-border hover:border-brand-green/50 rounded-xl p-8 flex flex-col items-center gap-2 text-brand-muted hover:text-brand-green transition-all group"
+                >
+                  <ImagePlus size={28} className="group-hover:scale-110 transition-transform" />
+                  <p className="text-sm font-medium">Clique para adicionar uma imagem</p>
+                  <p className="text-xs">PNG, JPG, WebP até 5MB</p>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            <input
+              ref={inputImagemRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleImagemSelecionada}
+              className="hidden"
+            />
+          </div>
+
+          <button onClick={handlePublicar} disabled={carregando || uploadando} className="btn-primary w-full">
+            {carregando || uploadando
+              ? <span className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-brand-dark border-t-transparent rounded-full animate-spin" />
+                  {uploadando ? 'Enviando imagem...' : 'Publicando...'}
+                </span>
               : 'Publicar 🚀'
             }
           </button>
