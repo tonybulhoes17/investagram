@@ -11,6 +11,7 @@ import { useChat } from '@/hooks/useChat'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { InstallPWA } from '@/components/InstallPWA'
 
 const NAV_ITEMS_DESKTOP = [
   { href: '/main/feed',     icon: Home,       label: 'Feed'     },
@@ -56,6 +57,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-brand-dark">
+      <InstallPWA />
 
       {/* ── HEADER NOTIFICAÇÕES MOBILE (topo fixo) ─────────── */}
       <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-brand-dark/95 backdrop-blur-sm border-b border-brand-border h-12 flex items-center justify-between px-4">
