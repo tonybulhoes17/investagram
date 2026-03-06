@@ -5,8 +5,6 @@ import { useEffect } from 'react'
 export function OneSignalInit() {
   useEffect(() => {
     if (typeof window === 'undefined') return
-
-    // Evita inicializar duas vezes
     if ((window as any).OneSignalInitialized) return
     ;(window as any).OneSignalInitialized = true
 
@@ -19,17 +17,10 @@ export function OneSignalInit() {
       window.OneSignalDeferred.push(async function(OneSignal: any) {
         await OneSignal.init({
           appId: '609ebebf-e10a-4304-aa7a-cf340eab1e88',
-          serviceWorkerParam: { scope: '/push/onesignal/' },
-          serviceWorkerPath: 'push/onesignal/OneSignalSDKWorker.js',
+          // Service Worker na raiz do site
           notifyButton: { enable: false },
           allowLocalhostAsSecureOrigin: true,
         })
-
-        // Solicita permissão automaticamente
-        const permission = await OneSignal.Notifications.permission
-        if (!permission) {
-          await OneSignal.Slidedown.promptPush()
-        }
       })
     }
     document.head.appendChild(script)
@@ -38,7 +29,6 @@ export function OneSignalInit() {
   return null
 }
 
-// Adiciona tipo global
 declare global {
   interface Window {
     OneSignalDeferred: any[]
