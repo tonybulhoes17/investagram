@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export function OneSignalInit() {
   useEffect(() => {
@@ -40,15 +41,23 @@ export function OneSignalInit() {
           }
         })
 
-        // Força solicitação de permissão após init
+        // Após init, vincula o user_id do Supabase como tag no OneSignal
         setTimeout(async () => {
           try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+              // Tag para identificar o usuário
+              await OneSignal.User.addTags({ user_id: user.id })
+              console.log('OneSignal tag set:', user.id)
+            }
+
+            // Solicita permissão se ainda não tem
             const permission = OneSignal.Notifications.permission
             if (!permission) {
               await OneSignal.Notifications.requestPermission()
             }
           } catch(e) {
-            console.log('OneSignal permission error:', e)
+            console.log('OneSignal error:', e)
           }
         }, 3000)
       })
