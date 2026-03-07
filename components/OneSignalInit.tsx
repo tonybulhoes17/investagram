@@ -20,46 +20,32 @@ export function OneSignalInit() {
           appId: '609ebebf-e10a-4304-aa7a-cf340eab1e88',
           notifyButton: { enable: false },
           allowLocalhostAsSecureOrigin: true,
+          // Não mostra prompt automático — controlamos manualmente
           promptOptions: {
             slidedown: {
-              prompts: [
-                {
-                  type: 'push',
-                  autoPrompt: true,
-                  text: {
-                    actionMessage: 'Receba notificações de curtidas, comentários e mensagens!',
-                    acceptButton: 'Permitir',
-                    cancelButton: 'Agora não',
-                  },
-                  delay: {
-                    pageViews: 1,
-                    timeDelay: 3,
-                  },
-                }
-              ]
+              prompts: []
             }
           }
         })
 
-        // Após init, vincula o user_id do Supabase como tag no OneSignal
         setTimeout(async () => {
           try {
+            // Vincula user_id do Supabase como tag
             const { data: { user } } = await supabase.auth.getUser()
             if (user) {
-              // Tag para identificar o usuário
               await OneSignal.User.addTags({ user_id: user.id })
-              console.log('OneSignal tag set:', user.id)
             }
 
-            // Solicita permissão se ainda não tem
-            const permission = OneSignal.Notifications.permission
-            if (!permission) {
+            // Só pede permissão se ainda não foi concedida/negada
+            const permission = await Notification.permission
+            if (permission === 'default') {
+              // Só pede uma vez — se já respondeu, não pergunta mais
               await OneSignal.Notifications.requestPermission()
             }
           } catch(e) {
             console.log('OneSignal error:', e)
           }
-        }, 3000)
+        }, 2000)
       })
     }
     document.head.appendChild(script)
