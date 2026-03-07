@@ -236,9 +236,9 @@ export default function ChatPage() {
     if (id) handleSelecionar(id)
   }, [])
 
-  const handleSelecionar = (id: string) => {
+  const handleSelecionar = async (id: string) => {
     setConversaAtiva(id)
-    zerarNaoLidas(id)              // zera badge imediatamente
+    await zerarNaoLidas(id)        // zera badge + marca lido no banco
     setTimeout(() => recarregar(), 800) // recarrega do banco depois
   }
 

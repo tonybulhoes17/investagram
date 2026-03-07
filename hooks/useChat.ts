@@ -103,7 +103,8 @@ export function useChat() {
   }
 
   // Zera badge imediatamente para uma conversa específica
-  const zerarNaoLidas = (conversationId: string) => {
+  const zerarNaoLidas = async (conversationId: string) => {
+    // 1. Zera estado local imediatamente
     setConversas((prev) => prev.map((c) =>
       c.id === conversationId ? { ...c, nao_lidas: 0 } : c
     ))
@@ -111,6 +112,16 @@ export function useChat() {
       const conv = conversas.find((c) => c.id === conversationId)
       return Math.max(0, prev - (conv?.nao_lidas ?? 0))
     })
+
+    // 2. Marca como lida no banco imediatamente
+    if (user) {
+      await supabase
+        .from('messages')
+        .update({ lida: true })
+        .eq('conversation_id', conversationId)
+        .eq('lida', false)
+        .neq('sender_id', user.id)
+    }
   }
 
   return { conversas, loading, totalNaoLidas, iniciarConversa, recarregar: carregarConversas, zerarNaoLidas }
