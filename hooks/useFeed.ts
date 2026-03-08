@@ -54,7 +54,7 @@ export function useFeed(userId?: string) {
     if (idsSeguindo.length > 0) {
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .select(`*, audio_url, imagem_url, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
         .in('user_id', idsSeguindo)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
@@ -69,7 +69,7 @@ export function useFeed(userId?: string) {
     if (excluir.length > 0) {
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .select(`*, audio_url, imagem_url, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
         .not('user_id', 'in', `(${excluir.join(',')})`)
         .order('score_relevancia', { ascending: false })
         .order('created_at', { ascending: false })
@@ -79,7 +79,7 @@ export function useFeed(userId?: string) {
       // Sem seguidos: mostra tudo como descobrir
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .select(`*, audio_url, imagem_url, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
         .order('score_relevancia', { ascending: false })
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
