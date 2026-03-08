@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { criarNotificacao } from '@/lib/notificacoes'
 import type { FeedItem } from '@/types'
+import { AudioPlayer } from '@/components/AudioRecorder'
 import toast from 'react-hot-toast'
 
 type Props = {
@@ -304,6 +305,11 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
               className="w-full max-h-96 object-cover hover:opacity-95 transition-opacity"
             />
           </motion.div>
+        )}
+
+        {/* Áudio do post */}
+        {(post as any).audio_url && (
+          <AudioPlayer url={(post as any).audio_url} />
         )}
 
         {/* Rodapé: ações */}

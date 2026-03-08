@@ -3,12 +3,13 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { TrendingUp, TrendingDown, BookOpen, ChevronDown, BarChart2, ImagePlus, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, BookOpen, ChevronDown, BarChart2, ImagePlus, X, Mic } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { ASSET_CLASSE_LABELS, AssetClasse } from '@/types'
 import { calcularScore } from '@/lib/relevancia'
 import { CriarEnquete } from '@/components/enquetes/CriarEnquete'
+import { AudioRecorder, AudioPlayer } from '@/components/AudioRecorder'
 import toast from 'react-hot-toast'
 
 type TipoPost = 'movimentacao' | 'tese' | 'enquete'
@@ -33,6 +34,11 @@ export default function PublicarPage() {
   const [imagemFile,    setImagemFile]    = useState<File | null>(null)
   const [imagemPreview, setImagemPreview] = useState<string | null>(null)
   const [uploadando,    setUploadando]    = useState(false)
+
+  // Áudio
+  const [audioFile,       setAudioFile]       = useState<File | null>(null)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
+  const [mostrarGravador, setMostrarGravador] = useState(false)
 
   const handleImagemSelecionada = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -61,6 +67,15 @@ export default function PublicarPage() {
     return data.publicUrl
   }
 
+  const uploadAudio = async (): Promise<string | null> => {
+    if (!audioFile || !user) return null
+    const caminho = `${user.id}/audio-${Date.now()}.webm`
+    const { error } = await supabase.storage.from('post-audios').upload(caminho, audioFile, { upsert: true })
+    if (error) { toast.error('Erro ao enviar áudio'); return null }
+    const { data } = supabase.storage.from('post-audios').getPublicUrl(caminho)
+    return data.publicUrl
+  }
+
   const handlePublicar = async () => {
     if (!user) { toast.error('Faça login para publicar'); return }
     if (tipo === 'movimentacao' && !ativoNome.trim()) { toast.error('Informe o nome do ativo'); return }
@@ -75,6 +90,12 @@ export default function PublicarPage() {
       if (!imagemUrl) { setCarregando(false); return }
     }
 
+    // Faz upload do áudio se houver
+    let audioUrl: string | null = null
+    if (audioFile) {
+      audioUrl = await uploadAudio()
+    }
+
     const score = calcularScore({ likes: 0, comments: 0, seguidores_autor: 0, created_at: new Date().toISOString() })
 
     const { error } = await supabase.from('posts').insert({
@@ -87,6 +108,7 @@ export default function PublicarPage() {
       data_operacao:    tipo === 'movimentacao' ? dataOp : null,
       score_relevancia: score,
       imagem_url:       imagemUrl,
+      audio_url:        audioUrl,
     })
 
     setCarregando(false)
@@ -238,6 +260,35 @@ export default function PublicarPage() {
               onChange={handleImagemSelecionada}
               className="hidden"
             />
+          </div>
+
+          {/* Gravador de Áudio */}
+          <div>
+            <label className="block text-sm text-brand-muted mb-2">
+              Áudio <span className="text-brand-muted/60">(opcional · máx 2 min)</span>
+            </label>
+            {audioPreviewUrl ? (
+              <div className="space-y-2">
+                <AudioPlayer url={audioPreviewUrl} />
+                <button onClick={() => { setAudioFile(null); setAudioPreviewUrl(null) }}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <X size={12} /> Remover áudio
+                </button>
+              </div>
+            ) : mostrarGravador ? (
+              <AudioRecorder
+                onAudioPronto={(file, url) => { setAudioFile(file); setAudioPreviewUrl(url); setMostrarGravador(false) }}
+                onCancelar={() => setMostrarGravador(false)}
+              />
+            ) : (
+              <button onClick={() => setMostrarGravador(true)}
+                className="w-full border-2 border-dashed border-brand-border hover:border-brand-green/50 rounded-xl p-5 flex items-center justify-center gap-2 text-brand-muted hover:text-brand-green transition-all group"
+              >
+                <Mic size={20} className="group-hover:scale-110 transition-transform" />
+                <span className="text-sm font-medium">Gravar áudio</span>
+              </button>
+            )}
           </div>
 
           <button onClick={handlePublicar} disabled={carregando || uploadando} className="btn-primary w-full">
