@@ -15,6 +15,7 @@ import { ASSET_CLASSE_COLORS, ASSET_CLASSE_LABELS } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { criarNotificacao } from '@/lib/notificacoes'
+import { EnquetesEncerradas } from '@/components/enquetes/EnquetesEncerradas'
 
 type Avaliacao = {
   id:           string
@@ -61,7 +62,7 @@ export default function PerfilPage() {
   const [totalPosts,     setTotalPosts]     = useState(0)
   const [jaSigo,         setJaSigo]         = useState(false)
   const [carregando,     setCarregando]     = useState(true)
-  const [abaAtiva,       setAbaAtiva]       = useState<'movimentacao' | 'tese' | 'carteira'>('movimentacao')
+  const [abaAtiva,       setAbaAtiva]       = useState<'movimentacao' | 'tese' | 'enquetes' | 'carteira'>('movimentacao')
   const [iniciandoChat,  setIniciandoChat]  = useState(false)
 
   const [avaliacoes,      setAvaliacoes]      = useState<Avaliacao[]>([])
@@ -260,16 +261,18 @@ export default function PerfilPage() {
 
       {/* Abas */}
       <div className="card p-1 flex gap-1">
-        {(['movimentacao', 'tese', 'carteira'] as const).map((aba) => (
+        {(['movimentacao', 'tese', 'enquetes', 'carteira'] as const).map((aba) => (
           <button key={aba} onClick={() => setAbaAtiva(aba)}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${abaAtiva === aba ? 'bg-brand-green text-brand-dark' : 'text-brand-muted hover:text-white'}`}
+            className={`flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all ${abaAtiva === aba ? 'bg-brand-green text-brand-dark' : 'text-brand-muted hover:text-white'}`}
           >
-            {aba === 'movimentacao' ? 'Movimentações' : aba === 'tese' ? 'Teses' : 'Carteira'}
+            {aba === 'movimentacao' ? 'Movim.' : aba === 'tese' ? 'Teses' : aba === 'enquetes' ? '📊 Enquetes' : 'Carteira'}
           </button>
         ))}
       </div>
 
-      {abaAtiva !== 'carteira' && <PerfilFeedList profileUserId={userId} tipo={abaAtiva} />}
+      {(abaAtiva === 'movimentacao' || abaAtiva === 'tese') && <PerfilFeedList profileUserId={userId} tipo={abaAtiva} />}
+
+      {abaAtiva === 'enquetes' && <EnquetesEncerradas userId={userId} />}
 
       {abaAtiva === 'carteira' && (
         <div className="space-y-4">
