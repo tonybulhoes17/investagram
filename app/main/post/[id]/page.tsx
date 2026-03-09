@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Send, Heart, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, Send, Heart, TrendingUp, TrendingDown, Mic, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { tempoRelativo, formatarNumero, cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import type { Post, Comment, Profile } from '@/types'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import { criarNotificacao } from '@/lib/notificacoes'
+import { AudioRecorder, AudioPlayer } from '@/components/AudioRecorder'
 
 type CommentWithProfile = Comment & { profiles: Profile }
 
@@ -51,6 +52,11 @@ export default function PostDetailPage() {
   const [jaCurtiu,         setJaCurtiu]         = useState(false)
   const [enviando,         setEnviando]         = useState(false)
   const [carregando,       setCarregando]       = useState(true)
+
+  // Áudio no comentário
+  const [audioFile,        setAudioFile]        = useState<File | null>(null)
+  const [audioPreviewUrl,  setAudioPreviewUrl]  = useState<string | null>(null)
+  const [mostrarGravador,  setMostrarGravador]  = useState(false)
 
   // Autocomplete @menção
   const [mencaoQuery,      setMencaoQuery]      = useState('')
@@ -141,14 +147,28 @@ export default function PostDetailPage() {
     if (e.key === 'Enter' && !e.shiftKey && !mencaoAberta) handleComentar()
   }
 
+  const uploadAudioComentario = async (): Promise<string | null> => {
+    if (!audioFile || !user) return null
+    const caminho = `${user.id}/audio-${Date.now()}.webm`
+    const { error } = await supabase.storage.from('post-audios').upload(caminho, audioFile, { upsert: true })
+    if (error) { toast.error('Erro ao enviar áudio'); return null }
+    const { data } = supabase.storage.from('post-audios').getPublicUrl(caminho)
+    return data.publicUrl
+  }
+
   const handleComentar = async () => {
     if (!user) { toast.error('Faça login para comentar'); return }
-    if (!novoComentario.trim()) return
+    if (!novoComentario.trim() && !audioFile) return
 
     setEnviando(true)
+
+    // Upload áudio se houver
+    let audioUrl: string | null = null
+    if (audioFile) audioUrl = await uploadAudioComentario()
+
     const { data, error } = await supabase
       .from('comments')
-      .insert({ post_id: postId, user_id: user.id, conteudo: novoComentario.trim() })
+      .insert({ post_id: postId, user_id: user.id, conteudo: novoComentario.trim() || '', audio_url: audioUrl })
       .select('*, profiles:user_id(*)')
       .single()
 
@@ -160,6 +180,9 @@ export default function PostDetailPage() {
       setComments((prev) => [...prev, data])
       setNovoComentario('')
       setMencaoAberta(false)
+      setAudioFile(null)
+      setAudioPreviewUrl(null)
+      setMostrarGravador(false)
 
       // Notifica dono do post
       if (post && post.user_id !== user.id) {
@@ -258,6 +281,7 @@ export default function PostDetailPage() {
         )}
 
         {post.conteudo && <p className="text-sm text-gray-300 leading-relaxed mb-4">{post.conteudo}</p>}
+        {(post as any).audio_url && <AudioPlayer url={(post as any).audio_url} />}
 
         <div className="flex items-center gap-4 pt-3 border-t border-brand-border/50">
           <button onClick={handleCurtir} className={cn('flex items-center gap-1.5 text-sm transition-colors', jaCurtiu ? 'text-red-400' : 'text-brand-muted hover:text-red-400')}>
@@ -324,8 +348,16 @@ export default function PostDetailPage() {
               </div>
 
               <button
+                onClick={() => setMostrarGravador(!mostrarGravador)}
+                type="button"
+                className={`p-2 rounded-xl border transition-colors self-start ${mostrarGravador ? 'border-brand-green text-brand-green bg-brand-green/10' : 'border-brand-border text-brand-muted hover:text-brand-green hover:border-brand-green/50'}`}
+              >
+                <Mic size={15} />
+              </button>
+
+              <button
                 onClick={handleComentar}
-                disabled={enviando || !novoComentario.trim()}
+                disabled={enviando || (!novoComentario.trim() && !audioFile)}
                 className="btn-primary px-3 py-2 disabled:opacity-50 self-start"
               >
                 {enviando
@@ -335,6 +367,30 @@ export default function PostDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* Gravador de áudio */}
+          <AnimatePresence>
+            {mostrarGravador && !audioPreviewUrl && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3">
+                <AudioRecorder
+                  onAudioPronto={(file, url) => { setAudioFile(file); setAudioPreviewUrl(url); setMostrarGravador(false) }}
+                  onCancelar={() => setMostrarGravador(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Preview do áudio gravado */}
+          {audioPreviewUrl && (
+            <div className="mt-3">
+              <AudioPlayer url={audioPreviewUrl} />
+              <button onClick={() => { setAudioFile(null); setAudioPreviewUrl(null) }}
+                className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 mt-1 transition-colors"
+              >
+                <X size={11} /> Remover áudio
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -363,9 +419,15 @@ export default function PostDetailPage() {
                     <span className="text-xs text-brand-muted">· {tempoRelativo(comment.created_at)}</span>
                   </div>
                   {/* Texto com @menções clicáveis */}
-                  <p className="text-sm text-gray-300 leading-relaxed">
-                    <TextoComMencoes texto={comment.conteudo} />
-                  </p>
+                  {comment.conteudo && (
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      <TextoComMencoes texto={comment.conteudo} />
+                    </p>
+                  )}
+                  {/* Áudio do comentário */}
+                  {(comment as any).audio_url && (
+                    <AudioPlayer url={(comment as any).audio_url} />
+                  )}
                 </div>
               </div>
             </motion.div>
