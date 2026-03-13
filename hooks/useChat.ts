@@ -6,7 +6,9 @@ export type Message = {
   id:              string
   conversation_id: string
   sender_id:       string
-  conteudo:        string
+  conteudo:        string | null
+  imagem_url:      string | null
+  audio_url:       string | null
   lida:            boolean
   created_at:      string
 }
@@ -63,15 +65,23 @@ export function useChat() {
 
         const [{ data: perfil }, { data: msgs }, { count: naoLidas }] = await Promise.all([
           supabase.from('profiles').select('id, nome, username, foto_url').eq('id', outroId).single(),
-          supabase.from('messages').select('conteudo').eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1),
+          supabase.from('messages').select('conteudo, imagem_url, audio_url').eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1),
           supabase.from('messages').select('*', { count: 'exact', head: true }).eq('conversation_id', conv.id).eq('lida', false).neq('sender_id', user.id),
         ])
 
+        // Preview da última mensagem
+        let ultima_msg: string | null = null
+        if (msgs?.[0]) {
+          if (msgs[0].conteudo)    ultima_msg = msgs[0].conteudo
+          else if (msgs[0].imagem_url) ultima_msg = '📷 Foto'
+          else if (msgs[0].audio_url)  ultima_msg = '🎤 Áudio'
+        }
+
         return {
           ...conv,
-          outro:      perfil as any,
-          ultima_msg: msgs?.[0]?.conteudo ?? null,
-          nao_lidas:  naoLidas ?? 0,
+          outro:     perfil as any,
+          ultima_msg,
+          nao_lidas: naoLidas ?? 0,
         }
       })
     )
@@ -102,9 +112,7 @@ export function useChat() {
     return nova?.id ?? null
   }
 
-  // Zera badge imediatamente para uma conversa específica
   const zerarNaoLidas = async (conversationId: string) => {
-    // 1. Zera estado local imediatamente
     setConversas((prev) => prev.map((c) =>
       c.id === conversationId ? { ...c, nao_lidas: 0 } : c
     ))
@@ -113,7 +121,6 @@ export function useChat() {
       return Math.max(0, prev - (conv?.nao_lidas ?? 0))
     })
 
-    // 2. Marca como lida no banco imediatamente
     if (user) {
       await supabase
         .from('messages')
@@ -166,7 +173,7 @@ export function useMensagens(conversationId: string | null) {
       .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
-    setMensagens(data ?? [])
+    setMensagens((data ?? []) as Message[])
     setLoading(false)
   }
 
@@ -184,14 +191,48 @@ export function useMensagens(conversationId: string | null) {
       .eq('id', conversationId)
   }
 
-  const enviarMensagem = async (conteudo: string) => {
-    if (!user || !conversationId || !conteudo.trim()) return
+  // Upload de imagem para o bucket chat-images
+  const uploadImagem = async (file: File): Promise<string | null> => {
+    if (!user) return null
+    const ext    = file.name.split('.').pop()
+    const caminho = `${user.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('chat-images').upload(caminho, file, { upsert: true })
+    if (error) return null
+    const { data } = supabase.storage.from('chat-images').getPublicUrl(caminho)
+    return data.publicUrl
+  }
+
+  // Upload de áudio para o bucket chat-audios
+  const uploadAudio = async (file: File): Promise<string | null> => {
+    if (!user) return null
+    const caminho = `${user.id}/audio-${Date.now()}.webm`
+    const { error } = await supabase.storage.from('chat-audios').upload(caminho, file, { upsert: true })
+    if (error) return null
+    const { data } = supabase.storage.from('chat-audios').getPublicUrl(caminho)
+    return data.publicUrl
+  }
+
+  const enviarMensagem = async (
+    conteudo: string,
+    opts?: { imagemFile?: File; audioFile?: File }
+  ) => {
+    if (!user || !conversationId) return
+    if (!conteudo.trim() && !opts?.imagemFile && !opts?.audioFile) return
+
     setEnviando(true)
+
+    let imagem_url: string | null = null
+    let audio_url:  string | null = null
+
+    if (opts?.imagemFile) imagem_url = await uploadImagem(opts.imagemFile)
+    if (opts?.audioFile)  audio_url  = await uploadAudio(opts.audioFile)
 
     const { data: novaMsg } = await supabase.from('messages').insert({
       conversation_id: conversationId,
       sender_id:       user.id,
-      conteudo:        conteudo.trim(),
+      conteudo:        conteudo.trim() || null,
+      imagem_url,
+      audio_url,
     }).select().single()
 
     if (novaMsg) {
