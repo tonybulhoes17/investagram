@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, MessageCircle, Share2, TrendingUp, TrendingDown, ChevronDown, ChevronUp, MoreVertical, Pencil, Trash2, X, Users } from 'lucide-react'
+import { Heart, MessageCircle, Share2, TrendingUp, TrendingDown, ChevronDown, ChevronUp, MoreVertical, Pencil, Trash2, X, Users, ChevronLeft, ChevronRight } from 'lucide-react'
 import { tempoRelativo, formatarNumero, cn } from '@/lib/utils'
 import { ASSET_CLASSE_LABELS } from '@/types'
 import { supabase } from '@/lib/supabase'
@@ -25,6 +25,199 @@ type CurtidaProfile = {
   nome:     string
   username: string
   foto_url: string | null
+}
+
+// ── Helper: extrai array de URLs de imagens ──────────────────
+function getImagensUrls(post: any): string[] {
+  // Prioriza o novo campo array; cai no legado imagem_url se necessário
+  if (Array.isArray(post.imagens_urls) && post.imagens_urls.length > 0) {
+    return post.imagens_urls
+  }
+  if (typeof post.imagem_url === 'string' && post.imagem_url) {
+    return [post.imagem_url]
+  }
+  return []
+}
+
+// ── Carrossel de imagens no card ─────────────────────────────
+function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: (index: number) => void }) {
+  const [indice, setIndice] = useState(0)
+
+  const anterior = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i - 1 + urls.length) % urls.length)
+  }, [urls.length])
+
+  const proximo = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i + 1) % urls.length)
+  }, [urls.length])
+
+  if (urls.length === 0) return null
+
+  // Uma única imagem — sem controles de carrossel
+  if (urls.length === 1) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mb-4 rounded-xl overflow-hidden border border-brand-border/50 cursor-pointer"
+        onClick={() => onClickFoto(0)}
+      >
+        <img src={urls[0]} alt="Imagem do post" className="w-full max-h-96 object-cover hover:opacity-95 transition-opacity" />
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="mb-4 relative rounded-xl overflow-hidden border border-brand-border/50 group cursor-pointer"
+      onClick={() => onClickFoto(indice)}
+    >
+      {/* Imagem atual */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.img
+          key={indice}
+          src={urls[indice]}
+          alt={`Foto ${indice + 1} de ${urls.length}`}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0  }}
+          exit={{   opacity: 0, x: -20 }}
+          transition={{ duration: 0.2 }}
+          className="w-full max-h-96 object-cover"
+        />
+      </AnimatePresence>
+
+      {/* Botões de navegação */}
+      <button
+        onClick={anterior}
+        className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <button
+        onClick={proximo}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
+      >
+        <ChevronRight size={16} />
+      </button>
+
+      {/* Contador e dots */}
+      <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5">
+        {urls.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); setIndice(i) }}
+            className={cn(
+              'rounded-full transition-all',
+              i === indice
+                ? 'w-4 h-1.5 bg-white'
+                : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/75'
+            )}
+          />
+        ))}
+      </div>
+
+      {/* Badge de contagem no canto */}
+      <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded-full text-xs text-white font-medium">
+        {indice + 1}/{urls.length}
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Modal de imagem em tela cheia com carrossel ──────────────
+function ModalImagem({ urls, indiceInicial, onClose }: { urls: string[]; indiceInicial: number; onClose: () => void }) {
+  const [indice, setIndice] = useState(indiceInicial)
+
+  const anterior = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i - 1 + urls.length) % urls.length)
+  }, [urls.length])
+
+  const proximo = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i + 1) % urls.length)
+  }, [urls.length])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      onClick={onClose}
+    >
+      {/* Fechar */}
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+      >
+        <X size={20} />
+      </button>
+
+      {/* Contador */}
+      {urls.length > 1 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white z-10">
+          {indice + 1} / {urls.length}
+        </div>
+      )}
+
+      {/* Imagem */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.img
+          key={indice}
+          src={urls[indice]}
+          alt={`Foto ${indice + 1}`}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1   }}
+          exit={{   opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.18 }}
+          className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </AnimatePresence>
+
+      {/* Navegação */}
+      {urls.length > 1 && (
+        <>
+          <button
+            onClick={anterior}
+            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <button
+            onClick={proximo}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm"
+          >
+            <ChevronRight size={22} />
+          </button>
+
+          {/* Miniaturas na parte inferior */}
+          <div
+            className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2 px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {urls.map((url, i) => (
+              <button
+                key={i}
+                onClick={(e) => { e.stopPropagation(); setIndice(i) }}
+                className={cn(
+                  'w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0',
+                  i === indice ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-90'
+                )}
+              >
+                <img src={url} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </motion.div>
+  )
 }
 
 // ── Modal de quem curtiu ─────────────────────────────────────
@@ -118,47 +311,23 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
   )
 }
 
-// ── Modal de imagem em tela cheia ────────────────────────────
-function ModalImagem({ url, onClose }: { url: string; onClose: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white bg-black/50 rounded-full hover:bg-black/80 transition-colors">
-        <X size={20} />
-      </button>
-      <motion.img
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        src={url}
-        alt="Imagem do post"
-        className="max-w-full max-h-[90vh] rounded-xl object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </motion.div>
-  )
-}
-
 // ── PostCard principal ───────────────────────────────────────
 export function PostCard({ post, onCurtir, onDeletar }: Props) {
   const router = useRouter()
   const { user } = useAuth()
 
-  const [expandido,     setExpandido]     = useState(false)
-  const [copiado,       setCopiado]       = useState(false)
-  const [menuAberto,    setMenuAberto]    = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deletando,     setDeletando]     = useState(false)
-  const [modalCurtidas, setModalCurtidas] = useState(false)
-  const [modalImagem,   setModalImagem]   = useState(false)
+  const [expandido,       setExpandido]       = useState(false)
+  const [copiado,         setCopiado]         = useState(false)
+  const [menuAberto,      setMenuAberto]      = useState(false)
+  const [confirmDelete,   setConfirmDelete]   = useState(false)
+  const [deletando,       setDeletando]       = useState(false)
+  const [modalCurtidas,   setModalCurtidas]   = useState(false)
+  const [modalImagemIdx,  setModalImagemIdx]  = useState<number | null>(null)
 
   const autor       = post.profiles
   const temConteudo = (post.conteudo?.length ?? 0) > 200
   const ehMeuPost   = user?.id === post.user_id
+  const imagens     = getImagensUrls(post)
 
   const handleCompartilhar = async () => {
     const url = `${window.location.origin}/main/post/${post.id}`
@@ -291,20 +460,12 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
           </div>
         )}
 
-        {/* Imagem do post */}
-        {(post as any).imagem_url && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-4 rounded-xl overflow-hidden border border-brand-border/50 cursor-pointer"
-            onClick={() => setModalImagem(true)}
-          >
-            <img
-              src={(post as any).imagem_url}
-              alt="Imagem do post"
-              className="w-full max-h-96 object-cover hover:opacity-95 transition-opacity"
-            />
-          </motion.div>
+        {/* Carrossel de imagens */}
+        {imagens.length > 0 && (
+          <CarrosselImagens
+            urls={imagens}
+            onClickFoto={(idx) => setModalImagemIdx(idx)}
+          />
         )}
 
         {/* Áudio do post */}
@@ -349,8 +510,12 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
       {modalCurtidas && <ModalCurtidas postId={post.id} onClose={() => setModalCurtidas(false)} />}
 
       <AnimatePresence>
-        {modalImagem && (post as any).imagem_url && (
-          <ModalImagem url={(post as any).imagem_url} onClose={() => setModalImagem(false)} />
+        {modalImagemIdx !== null && imagens.length > 0 && (
+          <ModalImagem
+            urls={imagens}
+            indiceInicial={modalImagemIdx}
+            onClose={() => setModalImagemIdx(null)}
+          />
         )}
       </AnimatePresence>
     </>
