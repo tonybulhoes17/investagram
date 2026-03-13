@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
+import toast from 'react-hot-toast'
 
 export type Message = {
   id:              string
@@ -69,10 +70,9 @@ export function useChat() {
           supabase.from('messages').select('*', { count: 'exact', head: true }).eq('conversation_id', conv.id).eq('lida', false).neq('sender_id', user.id),
         ])
 
-        // Preview da última mensagem
         let ultima_msg: string | null = null
         if (msgs?.[0]) {
-          if (msgs[0].conteudo)    ultima_msg = msgs[0].conteudo
+          if (msgs[0].conteudo)        ultima_msg = msgs[0].conteudo
           else if (msgs[0].imagem_url) ultima_msg = '📷 Foto'
           else if (msgs[0].audio_url)  ultima_msg = '🎤 Áudio'
         }
@@ -191,25 +191,27 @@ export function useMensagens(conversationId: string | null) {
       .eq('id', conversationId)
   }
 
-  // Upload de imagem para o bucket chat-images
-  const uploadImagem = async (file: File): Promise<string | null> => {
-    if (!user) return null
-    const ext    = file.name.split('.').pop()
+  const uploadImagem = async (file: File): Promise<string> => {
+    if (!user) throw new Error('Usuário não autenticado')
+    const ext     = file.name.split('.').pop()
     const caminho = `${user.id}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('chat-images').upload(caminho, file, { upsert: true })
-    if (error) return null
-    const { data } = supabase.storage.from('chat-images').getPublicUrl(caminho)
-    return data.publicUrl
+    if (error) {
+      console.error('[chat-images] upload error:', error)
+      throw new Error('Erro ao enviar imagem: ' + error.message)
+    }
+    return supabase.storage.from('chat-images').getPublicUrl(caminho).data.publicUrl
   }
 
-  // Upload de áudio para o bucket chat-audios
-  const uploadAudio = async (file: File): Promise<string | null> => {
-    if (!user) return null
+  const uploadAudio = async (file: File): Promise<string> => {
+    if (!user) throw new Error('Usuário não autenticado')
     const caminho = `${user.id}/audio-${Date.now()}.webm`
     const { error } = await supabase.storage.from('chat-audios').upload(caminho, file, { upsert: true })
-    if (error) return null
-    const { data } = supabase.storage.from('chat-audios').getPublicUrl(caminho)
-    return data.publicUrl
+    if (error) {
+      console.error('[chat-audios] upload error:', error)
+      throw new Error('Erro ao enviar áudio: ' + error.message)
+    }
+    return supabase.storage.from('chat-audios').getPublicUrl(caminho).data.publicUrl
   }
 
   const enviarMensagem = async (
@@ -224,16 +226,30 @@ export function useMensagens(conversationId: string | null) {
     let imagem_url: string | null = null
     let audio_url:  string | null = null
 
-    if (opts?.imagemFile) imagem_url = await uploadImagem(opts.imagemFile)
-    if (opts?.audioFile)  audio_url  = await uploadAudio(opts.audioFile)
+    // Faz upload da mídia ANTES de inserir — se falhar, aborta com toast
+    try {
+      if (opts?.imagemFile) imagem_url = await uploadImagem(opts.imagemFile)
+      if (opts?.audioFile)  audio_url  = await uploadAudio(opts.audioFile)
+    } catch (err: any) {
+      toast.error(err.message ?? 'Erro ao enviar mídia')
+      setEnviando(false)
+      return
+    }
 
-    const { data: novaMsg } = await supabase.from('messages').insert({
+    const { data: novaMsg, error: insertError } = await supabase.from('messages').insert({
       conversation_id: conversationId,
       sender_id:       user.id,
       conteudo:        conteudo.trim() || null,
       imagem_url,
       audio_url,
     }).select().single()
+
+    if (insertError) {
+      console.error('[messages] insert error:', insertError)
+      toast.error('Erro ao enviar mensagem')
+      setEnviando(false)
+      return
+    }
 
     if (novaMsg) {
       setMensagens((prev) => [...prev, novaMsg as Message])
