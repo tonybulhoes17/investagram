@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -39,23 +39,19 @@ function getImagensUrls(post: any): string[] {
   return []
 }
 
-// ── Carrossel de imagens no card ─────────────────────────────
+// ── Carrossel de imagens no card (swipe estilo Instagram) ────
 function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: (index: number) => void }) {
-  const [indice, setIndice] = useState(0)
+  const [indice,    setIndice]    = useState(0)
+  const [arrastou,  setArrastou]  = useState(false)   // distingue click de drag
+  const containerRef              = useRef<HTMLDivElement>(null)
 
-  const anterior = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIndice(i => (i - 1 + urls.length) % urls.length)
-  }, [urls.length])
-
-  const proximo = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIndice(i => (i + 1) % urls.length)
+  const ir = useCallback((i: number) => {
+    setIndice(Math.max(0, Math.min(i, urls.length - 1)))
   }, [urls.length])
 
   if (urls.length === 0) return null
 
-  // Uma única imagem — sem controles de carrossel
+  // Uma única imagem — comportamento simples
   if (urls.length === 1) {
     return (
       <motion.div
@@ -69,59 +65,70 @@ function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: 
     )
   }
 
+  const largura = containerRef.current?.offsetWidth ?? 0
+
   return (
     <motion.div
+      ref={containerRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="mb-4 relative rounded-xl overflow-hidden border border-brand-border/50 group cursor-pointer"
-      onClick={() => onClickFoto(indice)}
+      className="mb-4 relative rounded-xl overflow-hidden border border-brand-border/50 select-none"
+      style={{ touchAction: 'pan-y' }}   // permite scroll vertical, captura horizontal
     >
-      {/* Imagem atual */}
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.img
-          key={indice}
-          src={urls[indice]}
-          alt={`Foto ${indice + 1} de ${urls.length}`}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0  }}
-          exit={{   opacity: 0, x: -20 }}
-          transition={{ duration: 0.2 }}
-          className="w-full max-h-96 object-cover"
-        />
-      </AnimatePresence>
-
-      {/* Botões de navegação */}
-      <button
-        onClick={anterior}
-        className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
+      {/* Trilho deslizante */}
+      <motion.div
+        className="flex"
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.08}
+        onDragStart={() => setArrastou(false)}
+        onDrag={(_, info) => {
+          // considera "arrastou" se movimento horizontal > 5px
+          if (Math.abs(info.offset.x) > 5) setArrastou(true)
+        }}
+        onDragEnd={(_, info) => {
+          const threshold = largura * 0.2   // 20% da largura para trocar
+          if (info.offset.x < -threshold && indice < urls.length - 1) ir(indice + 1)
+          else if (info.offset.x > threshold && indice > 0) ir(indice - 1)
+        }}
+        animate={{ x: -(indice * (largura || 100)) }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        style={{ width: `${urls.length * 100}%` }}
       >
-        <ChevronLeft size={16} />
-      </button>
-      <button
-        onClick={proximo}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
-      >
-        <ChevronRight size={16} />
-      </button>
+        {urls.map((url, i) => (
+          <div
+            key={url}
+            style={{ width: `${100 / urls.length}%` }}
+            onClick={() => { if (!arrastou) onClickFoto(i) }}
+            className="cursor-pointer"
+          >
+            <img
+              src={url}
+              alt={`Foto ${i + 1} de ${urls.length}`}
+              className="w-full max-h-96 object-cover pointer-events-none"
+              draggable={false}
+            />
+          </div>
+        ))}
+      </motion.div>
 
-      {/* Contador e dots */}
-      <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5">
+      {/* Dots estilo Instagram */}
+      <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5 pointer-events-none">
         {urls.map((_, i) => (
-          <button
+          <div
             key={i}
-            onClick={(e) => { e.stopPropagation(); setIndice(i) }}
             className={cn(
-              'rounded-full transition-all',
+              'rounded-full transition-all duration-300',
               i === indice
                 ? 'w-4 h-1.5 bg-white'
-                : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/75'
+                : 'w-1.5 h-1.5 bg-white/50'
             )}
           />
         ))}
       </div>
 
-      {/* Badge de contagem no canto */}
-      <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded-full text-xs text-white font-medium">
+      {/* Badge contador */}
+      <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded-full text-xs text-white font-medium pointer-events-none">
         {indice + 1}/{urls.length}
       </div>
     </motion.div>
