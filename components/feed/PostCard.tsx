@@ -371,6 +371,7 @@ function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComent
   )
 }
 
+
 // ── PostCard principal ───────────────────────────────────────
 export function PostCard({ post, onCurtir, onDeletar }: Props) {
   const router = useRouter()
@@ -542,7 +543,7 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
         )}
 
         {/* Rodapé: ações */}
-        <div className="flex items-center gap-4 pt-3 border-t border-brand-border/50">
+        <div className="flex items-center gap-4 pt-3 mt-3 border-t border-brand-border/50">
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {
