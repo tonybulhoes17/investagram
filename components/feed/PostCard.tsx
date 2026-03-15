@@ -11,7 +11,6 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { criarNotificacao } from '@/lib/notificacoes'
 import type { FeedItem } from '@/types'
-import type { UltimoComentario } from '@/hooks/useFeed'
 import { AudioPlayer } from '@/components/AudioRecorder'
 import toast from 'react-hot-toast'
 
@@ -28,18 +27,35 @@ type CurtidaProfile = {
   foto_url: string | null
 }
 
+type UltimoComentario = {
+  id:         string
+  conteudo:   string
+  created_at: string
+  autor: {
+    id:       string
+    nome:     string
+    username: string
+    foto_url: string | null
+  }
+}
+
 // ── Helper: extrai array de URLs de imagens ──────────────────
 function getImagensUrls(post: any): string[] {
-  if (Array.isArray(post.imagens_urls) && post.imagens_urls.length > 0) return post.imagens_urls
-  if (typeof post.imagem_url === 'string' && post.imagem_url) return [post.imagem_url]
+  // Prioriza o novo campo array; cai no legado imagem_url se necessário
+  if (Array.isArray(post.imagens_urls) && post.imagens_urls.length > 0) {
+    return post.imagens_urls
+  }
+  if (typeof post.imagem_url === 'string' && post.imagem_url) {
+    return [post.imagem_url]
+  }
   return []
 }
 
 // ── Carrossel de imagens no card (swipe estilo Instagram) ────
 function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: (index: number) => void }) {
-  const [indice,   setIndice]   = useState(0)
-  const [arrastou, setArrastou] = useState(false)
-  const containerRef            = useRef<HTMLDivElement>(null)
+  const [indice,    setIndice]    = useState(0)
+  const [arrastou,  setArrastou]  = useState(false)   // distingue click de drag
+  const containerRef              = useRef<HTMLDivElement>(null)
 
   const ir = useCallback((i: number) => {
     setIndice(Math.max(0, Math.min(i, urls.length - 1)))
@@ -47,6 +63,7 @@ function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: 
 
   if (urls.length === 0) return null
 
+  // Uma única imagem — comportamento simples
   if (urls.length === 1) {
     return (
       <motion.div
@@ -68,17 +85,21 @@ function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="mb-4 relative rounded-xl overflow-hidden border border-brand-border/50 select-none"
-      style={{ touchAction: 'pan-y' }}
+      style={{ touchAction: 'pan-y' }}   // permite scroll vertical, captura horizontal
     >
+      {/* Trilho deslizante */}
       <motion.div
         className="flex"
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.08}
         onDragStart={() => setArrastou(false)}
-        onDrag={(_, info) => { if (Math.abs(info.offset.x) > 5) setArrastou(true) }}
+        onDrag={(_, info) => {
+          // considera "arrastou" se movimento horizontal > 5px
+          if (Math.abs(info.offset.x) > 5) setArrastou(true)
+        }}
         onDragEnd={(_, info) => {
-          const threshold = largura * 0.2
+          const threshold = largura * 0.2   // 20% da largura para trocar
           if (info.offset.x < -threshold && indice < urls.length - 1) ir(indice + 1)
           else if (info.offset.x > threshold && indice > 0) ir(indice - 1)
         }}
@@ -87,17 +108,38 @@ function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: 
         style={{ width: `${urls.length * 100}%` }}
       >
         {urls.map((url, i) => (
-          <div key={url} style={{ width: `${100 / urls.length}%` }} onClick={() => { if (!arrastou) onClickFoto(i) }} className="cursor-pointer">
-            <img src={url} alt={`Foto ${i + 1} de ${urls.length}`} className="w-full max-h-96 object-cover pointer-events-none" draggable={false} />
+          <div
+            key={url}
+            style={{ width: `${100 / urls.length}%` }}
+            onClick={() => { if (!arrastou) onClickFoto(i) }}
+            className="cursor-pointer"
+          >
+            <img
+              src={url}
+              alt={`Foto ${i + 1} de ${urls.length}`}
+              className="w-full max-h-96 object-cover pointer-events-none"
+              draggable={false}
+            />
           </div>
         ))}
       </motion.div>
 
+      {/* Dots estilo Instagram */}
       <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5 pointer-events-none">
         {urls.map((_, i) => (
-          <div key={i} className={cn('rounded-full transition-all duration-300', i === indice ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/50')} />
+          <div
+            key={i}
+            className={cn(
+              'rounded-full transition-all duration-300',
+              i === indice
+                ? 'w-4 h-1.5 bg-white'
+                : 'w-1.5 h-1.5 bg-white/50'
+            )}
+          />
         ))}
       </div>
+
+      {/* Badge contador */}
       <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded-full text-xs text-white font-medium pointer-events-none">
         {indice + 1}/{urls.length}
       </div>
@@ -109,44 +151,83 @@ function CarrosselImagens({ urls, onClickFoto }: { urls: string[]; onClickFoto: 
 function ModalImagem({ urls, indiceInicial, onClose }: { urls: string[]; indiceInicial: number; onClose: () => void }) {
   const [indice, setIndice] = useState(indiceInicial)
 
-  const anterior = useCallback((e: React.MouseEvent) => { e.stopPropagation(); setIndice(i => (i - 1 + urls.length) % urls.length) }, [urls.length])
-  const proximo  = useCallback((e: React.MouseEvent) => { e.stopPropagation(); setIndice(i => (i + 1) % urls.length) }, [urls.length])
+  const anterior = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i - 1 + urls.length) % urls.length)
+  }, [urls.length])
+
+  const proximo = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIndice(i => (i + 1) % urls.length)
+  }, [urls.length])
 
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
       onClick={onClose}
     >
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
+      {/* Fechar */}
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+      >
         <X size={20} />
       </button>
+
+      {/* Contador */}
       {urls.length > 1 && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white z-10">
           {indice + 1} / {urls.length}
         </div>
       )}
+
+      {/* Imagem */}
       <AnimatePresence mode="wait" initial={false}>
         <motion.img
-          key={indice} src={urls[indice]} alt={`Foto ${indice + 1}`}
-          initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+          key={indice}
+          src={urls[indice]}
+          alt={`Foto ${indice + 1}`}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1   }}
+          exit={{   opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.18 }}
           className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain"
           onClick={(e) => e.stopPropagation()}
         />
       </AnimatePresence>
+
+      {/* Navegação */}
       {urls.length > 1 && (
         <>
-          <button onClick={anterior} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm">
+          <button
+            onClick={anterior}
+            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm"
+          >
             <ChevronLeft size={22} />
           </button>
-          <button onClick={proximo} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm">
+          <button
+            onClick={proximo}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors backdrop-blur-sm"
+          >
             <ChevronRight size={22} />
           </button>
-          <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2 px-4" onClick={(e) => e.stopPropagation()}>
+
+          {/* Miniaturas na parte inferior */}
+          <div
+            className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2 px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             {urls.map((url, i) => (
-              <button key={i} onClick={(e) => { e.stopPropagation(); setIndice(i) }}
-                className={cn('w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0', i === indice ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-90')}
+              <button
+                key={i}
+                onClick={(e) => { e.stopPropagation(); setIndice(i) }}
+                className={cn(
+                  'w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0',
+                  i === indice ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-90'
+                )}
               >
                 <img src={url} alt="" className="w-full h-full object-cover" />
               </button>
@@ -179,12 +260,16 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-4"
         onClick={onClose}
       >
         <motion.div
-          initial={{ opacity: 0, y: 40, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 40, scale: 0.97 }}
+          initial={{ opacity: 0, y: 40, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0,  scale: 1 }}
+          exit={{ opacity: 0, y: 40, scale: 0.97 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className="bg-brand-card border border-brand-border rounded-2xl w-full max-w-md max-h-[70vh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
@@ -193,12 +278,15 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
             <div className="flex items-center gap-2">
               <Heart size={16} className="text-red-400 fill-red-400" />
               <h2 className="text-white font-semibold">Curtidas</h2>
-              {!loading && <span className="text-xs text-brand-muted bg-brand-surface px-2 py-0.5 rounded-full">{perfis.length}</span>}
+              {!loading && (
+                <span className="text-xs text-brand-muted bg-brand-surface px-2 py-0.5 rounded-full">{perfis.length}</span>
+              )}
             </div>
             <button onClick={onClose} className="p-1.5 text-brand-muted hover:text-white transition-colors rounded-lg hover:bg-brand-surface">
               <X size={16} />
             </button>
           </div>
+
           <div className="overflow-y-auto flex-1 p-3">
             {loading && (
               <div className="space-y-3">
@@ -242,6 +330,7 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
   )
 }
 
+
 // ── Último comentário em destaque ────────────────────────────
 function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComentario; postId: string }) {
   const MAX = 120
@@ -253,7 +342,6 @@ function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComent
     <Link href={`/main/post/${postId}`} className="block group">
       <div className="mt-3 px-3 py-2.5 bg-brand-surface/60 border border-brand-border/40 rounded-xl hover:border-brand-green/20 transition-colors">
         <div className="flex items-center gap-2 mb-1.5">
-          {/* Avatar mini */}
           <div className="w-5 h-5 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
             {comentario.autor?.foto_url
               ? <img src={comentario.autor.foto_url} alt={comentario.autor.nome} className="w-full h-full object-cover" />
@@ -267,7 +355,6 @@ function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComent
             {tempoRelativo(comentario.created_at)}
           </span>
         </div>
-
         <p className="text-xs text-gray-400 leading-relaxed">
           {texto}
           {longo && !expandido && (
@@ -289,19 +376,18 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
   const router = useRouter()
   const { user } = useAuth()
 
-  const [expandido,      setExpandido]      = useState(false)
-  const [copiado,        setCopiado]        = useState(false)
-  const [menuAberto,     setMenuAberto]     = useState(false)
-  const [confirmDelete,  setConfirmDelete]  = useState(false)
-  const [deletando,      setDeletando]      = useState(false)
-  const [modalCurtidas,  setModalCurtidas]  = useState(false)
-  const [modalImagemIdx, setModalImagemIdx] = useState<number | null>(null)
+  const [expandido,       setExpandido]       = useState(false)
+  const [copiado,         setCopiado]         = useState(false)
+  const [menuAberto,      setMenuAberto]      = useState(false)
+  const [confirmDelete,   setConfirmDelete]   = useState(false)
+  const [deletando,       setDeletando]       = useState(false)
+  const [modalCurtidas,   setModalCurtidas]   = useState(false)
+  const [modalImagemIdx,  setModalImagemIdx]  = useState<number | null>(null)
 
-  const autor            = post.profiles
-  const temConteudo      = (post.conteudo?.length ?? 0) > 200
-  const ehMeuPost        = user?.id === post.user_id
-  const imagens          = getImagensUrls(post)
-  const ultimoComentario = (post as any).ultimo_comentario as UltimoComentario | null
+  const autor       = post.profiles
+  const temConteudo = (post.conteudo?.length ?? 0) > 200
+  const ehMeuPost   = user?.id === post.user_id
+  const imagens     = getImagensUrls(post)
 
   const handleCompartilhar = async () => {
     const url = `${window.location.origin}/main/post/${post.id}`
@@ -365,7 +451,9 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
               <AnimatePresence>
                 {menuAberto && (
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                    initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                    animate={{ opacity: 1, scale: 1,   y: 0  }}
+                    exit={{   opacity: 0, scale: 0.9, y: -5  }}
                     className="absolute right-0 top-8 z-20 bg-brand-card border border-brand-border rounded-xl shadow-xl overflow-hidden min-w-[130px]"
                   >
                     <button onClick={handleEditar} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-brand-surface transition-colors">
@@ -434,7 +522,10 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
 
         {/* Carrossel de imagens */}
         {imagens.length > 0 && (
-          <CarrosselImagens urls={imagens} onClickFoto={(idx) => setModalImagemIdx(idx)} />
+          <CarrosselImagens
+            urls={imagens}
+            onClickFoto={(idx) => setModalImagemIdx(idx)}
+          />
         )}
 
         {/* Áudio do post */}
@@ -443,12 +534,15 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
         )}
 
         {/* Último comentário */}
-        {ultimoComentario && (
-          <UltimoComentarioCard comentario={ultimoComentario} postId={post.id} />
+        {(post as any).ultimo_comentario && (
+          <UltimoComentarioCard
+            comentario={(post as any).ultimo_comentario as UltimoComentario}
+            postId={post.id}
+          />
         )}
 
         {/* Rodapé: ações */}
-        <div className="flex items-center gap-4 pt-3 mt-3 border-t border-brand-border/50">
+        <div className="flex items-center gap-4 pt-3 border-t border-brand-border/50">
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {
@@ -485,7 +579,11 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
 
       <AnimatePresence>
         {modalImagemIdx !== null && imagens.length > 0 && (
-          <ModalImagem urls={imagens} indiceInicial={modalImagemIdx} onClose={() => setModalImagemIdx(null)} />
+          <ModalImagem
+            urls={imagens}
+            indiceInicial={modalImagemIdx}
+            onClose={() => setModalImagemIdx(null)}
+          />
         )}
       </AnimatePresence>
     </>
