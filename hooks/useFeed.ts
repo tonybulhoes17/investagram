@@ -47,17 +47,16 @@ export function useFeed(userId?: string) {
         .select('following_id')
         .eq('follower_id', userId)
       idsSeguindo = seguindo?.map((s) => s.following_id) ?? []
-      // Inclui os próprios posts do usuário no feed Seguindo
-      if (userId && !idsSeguindo.includes(userId)) idsSeguindo.push(userId)
     }
 
-    // 2. Posts de quem segue (mais recentes primeiro)
+    // 2. Posts de quem segue + próprios posts (usuário "segue a si mesmo")
+    const idsSeguindoComProprio = userId ? [...idsSeguindo, userId] : idsSeguindo
     let seguindoPosts: FeedItem[] = []
-    if (idsSeguindo.length > 0) {
+    if (idsSeguindoComProprio.length > 0) {
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
-        .in('user_id', idsSeguindo)
+        .select(`*, audio_url, imagem_url, imagens_urls, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .in('user_id', idsSeguindoComProprio)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
       seguindoPosts = await enriquecerPosts(data ?? [], userId)
@@ -65,13 +64,13 @@ export function useFeed(userId?: string) {
 
     // 3. Posts relevantes de quem NÃO segue (Descobrir)
     // Exclui próprio usuário e quem já segue
-    const excluir = idsSeguindo
+    const excluir = idsSeguindoComProprio
 
     let descobrirPosts: FeedItem[] = []
     if (excluir.length > 0) {
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .select(`*, audio_url, imagem_url, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
         .not('user_id', 'in', `(${excluir.join(',')})`)
         .order('score_relevancia', { ascending: false })
         .order('created_at', { ascending: false })
@@ -81,7 +80,7 @@ export function useFeed(userId?: string) {
       // Sem seguidos: mostra tudo como descobrir
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
+        .select(`*, audio_url, imagem_url, profiles:user_id(id,username,nome,foto_url), likes(count), comments(count)`)
         .order('score_relevancia', { ascending: false })
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1)
