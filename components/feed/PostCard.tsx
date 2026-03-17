@@ -29,7 +29,8 @@ type CurtidaProfile = {
 
 type UltimoComentario = {
   id:         string
-  conteudo:   string
+  conteudo:   string | null
+  audio_url:  string | null
   created_at: string
   autor: {
     id:       string
@@ -335,12 +336,14 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
 function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComentario; postId: string }) {
   const MAX = 120
   const [expandido, setExpandido] = useState(false)
-  const longo = comentario.conteudo.length > MAX
-  const texto = expandido || !longo ? comentario.conteudo : comentario.conteudo.slice(0, MAX) + '…'
+  const temTexto = !!comentario.conteudo?.trim()
+  const longo    = (comentario.conteudo?.length ?? 0) > MAX
+  const texto    = expandido || !longo ? comentario.conteudo : comentario.conteudo!.slice(0, MAX) + '…'
 
   return (
     <Link href={`/main/post/${postId}`} className="block group">
       <div className="mt-3 px-3 py-2.5 bg-brand-surface/60 border border-brand-border/40 rounded-xl hover:border-brand-green/20 transition-colors">
+        {/* Cabeçalho: avatar + nome + tempo */}
         <div className="flex items-center gap-2 mb-1.5">
           <div className="w-5 h-5 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
             {comentario.autor?.foto_url
@@ -355,17 +358,28 @@ function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComent
             {tempoRelativo(comentario.created_at)}
           </span>
         </div>
-        <p className="text-xs text-gray-400 leading-relaxed">
-          {texto}
-          {longo && !expandido && (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpandido(true) }}
-              className="text-brand-green hover:underline ml-1"
-            >
-              ver mais
-            </button>
-          )}
-        </p>
+
+        {/* Texto */}
+        {temTexto && (
+          <p className="text-xs text-gray-400 leading-relaxed">
+            {texto}
+            {longo && !expandido && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpandido(true) }}
+                className="text-brand-green hover:underline ml-1"
+              >
+                ver mais
+              </button>
+            )}
+          </p>
+        )}
+
+        {/* Áudio — impede navegação ao clicar no player */}
+        {comentario.audio_url && (
+          <div onClick={(e) => e.preventDefault()} className="mt-1">
+            <AudioPlayer url={comentario.audio_url} />
+          </div>
+        )}
       </div>
     </Link>
   )

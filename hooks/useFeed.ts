@@ -8,7 +8,8 @@ const PAGE_SIZE = 10
 
 export type UltimoComentario = {
   id:         string
-  conteudo:   string
+  conteudo:   string | null
+  audio_url:  string | null
   created_at: string
   autor: {
     id:       string
@@ -30,17 +31,17 @@ async function enriquecerPosts(posts: any[], userId?: string): Promise<FeedItem[
           .eq('user_id', userId)
         ja_curtiu = (count ?? 0) > 0
       }
-      // Último comentário com perfil do autor
+      // Último comentário
       const { data: ultComent } = await supabase
         .from('comments')
-        .select('id, conteudo, created_at, profiles:user_id(id, nome, username, foto_url)')
+        .select('id, conteudo, audio_url, created_at, profiles:user_id(id, nome, username, foto_url)')
         .eq('post_id', post.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
 
       const ultimo_comentario: UltimoComentario | null = ultComent
-        ? { id: ultComent.id, conteudo: ultComent.conteudo, created_at: ultComent.created_at, autor: ultComent.profiles as any }
+        ? { id: ultComent.id, conteudo: ultComent.conteudo ?? null, audio_url: (ultComent as any).audio_url ?? null, created_at: ultComent.created_at, autor: (ultComent as any).profiles as any }
         : null
 
       return {
@@ -54,7 +55,6 @@ async function enriquecerPosts(posts: any[], userId?: string): Promise<FeedItem[
   )
 }
 
-// Posts com comentário mais recente sobem no feed
 function ordenarPorAtividade(posts: FeedItem[]): FeedItem[] {
   return [...posts].sort((a, b) => {
     const aAtivo = (a as any).ultimo_comentario?.created_at ?? a.created_at
@@ -173,7 +173,7 @@ export function useFeed(userId?: string) {
     setPostsDescobrir((prev) => prev.filter((p) => p.id !== postId))
   }
 
-  // Realtime: novo comentário → atualiza último comentário e sobe o post
+  // Realtime: novo comentário sobe o post e atualiza último comentário
   useEffect(() => {
     const channel = supabase
       .channel('feed-comentarios')
@@ -182,14 +182,12 @@ export function useFeed(userId?: string) {
         const postId = novo.post_id
 
         const { data: perfil } = await supabase
-          .from('profiles')
-          .select('id, nome, username, foto_url')
-          .eq('id', novo.user_id)
-          .single()
+          .from('profiles').select('id, nome, username, foto_url').eq('id', novo.user_id).single()
 
         const ultimoComentario: UltimoComentario = {
           id:         novo.id,
-          conteudo:   novo.conteudo,
+          conteudo:   novo.conteudo ?? null,
+          audio_url:  novo.audio_url ?? null,
           created_at: novo.created_at,
           autor:      perfil as any,
         }
@@ -197,11 +195,7 @@ export function useFeed(userId?: string) {
         const atualizarLista = (prev: FeedItem[]) => {
           const idx = prev.findIndex((p) => p.id === postId)
           if (idx === -1) return prev
-          const atualizado = {
-            ...prev[idx],
-            _count_comments:   (prev[idx]._count_comments ?? 0) + 1,
-            ultimo_comentario: ultimoComentario,
-          } as FeedItem
+          const atualizado = { ...prev[idx], _count_comments: (prev[idx]._count_comments ?? 0) + 1, ultimo_comentario: ultimoComentario } as FeedItem
           const nova = [...prev]
           nova.splice(idx, 1)
           return [atualizado, ...nova]
@@ -211,7 +205,6 @@ export function useFeed(userId?: string) {
         setPostsDescobrir(atualizarLista)
       })
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [])
 
