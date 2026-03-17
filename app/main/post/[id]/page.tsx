@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Send, Heart, TrendingUp, TrendingDown, Mic, X } from 'lucide-react'
+import { ArrowLeft, Send, Heart, TrendingUp, TrendingDown, Mic, X, Trash2, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { tempoRelativo, formatarNumero, cn } from '@/lib/utils'
@@ -14,7 +14,18 @@ import Link from 'next/link'
 import { criarNotificacao } from '@/lib/notificacoes'
 import { AudioRecorder, AudioPlayer } from '@/components/AudioRecorder'
 
-type CommentWithProfile = Comment & { profiles: Profile }
+type CommentWithProfile = Comment & {
+  profiles:          Profile
+  _count_likes?:     number
+  ja_curtiu?:        boolean
+}
+
+type LikeProfile = {
+  id:       string
+  nome:     string
+  username: string
+  foto_url: string | null
+}
 
 // ── Renderiza texto com @menções clicáveis ───────────────────
 function TextoComMencoes({ texto }: { texto: string }) {
@@ -23,11 +34,7 @@ function TextoComMencoes({ texto }: { texto: string }) {
     <>
       {partes.map((parte, i) =>
         parte.startsWith('@') ? (
-          <Link
-            key={i}
-            href={`/main/busca?q=${parte.slice(1)}`}
-            className="text-brand-green font-semibold hover:underline"
-          >
+          <Link key={i} href={`/main/busca?q=${parte.slice(1)}`} className="text-brand-green font-semibold hover:underline">
             {parte}
           </Link>
         ) : (
@@ -35,6 +42,93 @@ function TextoComMencoes({ texto }: { texto: string }) {
         )
       )}
     </>
+  )
+}
+
+// ── Modal de quem curtiu o comentário ────────────────────────
+function ModalLikesComentario({ commentId, onClose }: { commentId: string; onClose: () => void }) {
+  const [perfis,  setPerfis]  = useState<LikeProfile[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('comment_likes')
+      .select('user_id, profiles:user_id(id, nome, username, foto_url)')
+      .eq('comment_id', commentId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setPerfis((data ?? []).map((d: any) => d.profiles).filter(Boolean))
+        setLoading(false)
+      })
+  }, [commentId])
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 40, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0,  scale: 1 }}
+          exit={{   opacity: 0, y: 40, scale: 0.97 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="bg-brand-card border border-brand-border rounded-2xl w-full max-w-md max-h-[70vh] flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-brand-border">
+            <div className="flex items-center gap-2">
+              <Heart size={16} className="text-red-400 fill-red-400" />
+              <h2 className="text-white font-semibold">Curtidas</h2>
+              {!loading && <span className="text-xs text-brand-muted bg-brand-surface px-2 py-0.5 rounded-full">{perfis.length}</span>}
+            </div>
+            <button onClick={onClose} className="p-1.5 text-brand-muted hover:text-white transition-colors rounded-lg hover:bg-brand-surface">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 p-3">
+            {loading && (
+              <div className="space-y-3">
+                {[1,2,3].map((n) => (
+                  <div key={n} className="flex items-center gap-3 p-2 animate-pulse">
+                    <div className="w-10 h-10 rounded-full bg-brand-surface shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-3 bg-brand-surface rounded w-32 mb-1.5" />
+                      <div className="h-2 bg-brand-surface rounded w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!loading && perfis.length === 0 && (
+              <div className="py-8 text-center">
+                <Heart size={28} className="text-brand-muted mx-auto mb-2" />
+                <p className="text-brand-muted text-sm">Nenhuma curtida ainda</p>
+              </div>
+            )}
+            {!loading && perfis.map((p, i) => (
+              <motion.div key={p.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+                <Link href={`/main/perfil/${p.id}`} onClick={onClose} className="flex items-center gap-3 p-2 rounded-xl hover:bg-brand-surface transition-colors group">
+                  <div className="w-10 h-10 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
+                    {p.foto_url
+                      ? <img src={p.foto_url} alt={p.nome} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-sm font-bold text-brand-muted">{p.nome[0].toUpperCase()}</div>
+                    }
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white group-hover:text-brand-green transition-colors truncate">{p.nome}</p>
+                    <p className="text-xs text-brand-muted">@{p.username}</p>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   )
 }
 
@@ -64,9 +158,15 @@ export default function PostDetailPage() {
   const [mencaoAberta,     setMencaoAberta]     = useState(false)
   const [mencaoIndex,      setMencaoIndex]      = useState(-1)
 
+  // Likes de comentários
+  const [modalLikesCommentId, setModalLikesCommentId] = useState<string | null>(null)
+
+  // Deletar comentário
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletandoId,     setDeletandoId]     = useState<string | null>(null)
+
   useEffect(() => { if (postId) carregarPost() }, [postId, user])
 
-  // Busca sugestões ao digitar @
   useEffect(() => {
     if (!mencaoQuery) { setMencaoSugestoes([]); setMencaoAberta(false); return }
     const timeout = setTimeout(async () => {
@@ -90,13 +190,40 @@ export default function PostDetailPage() {
       supabase.from('likes').select('*', { count: 'exact', head: true }).eq('post_id', postId),
     ])
     setPost(postData)
-    setComments(commentsData ?? [])
     setLikesCount(likesTotal ?? 0)
+
+    // Enriquece comentários com likes
+    const commentsEnriquecidos = await enriquecerComentarios(commentsData ?? [])
+    setComments(commentsEnriquecidos)
+
     if (user) {
       const { count } = await supabase.from('likes').select('*', { count: 'exact', head: true }).eq('post_id', postId).eq('user_id', user.id)
       setJaCurtiu((count ?? 0) > 0)
     }
     setCarregando(false)
+  }
+
+  const enriquecerComentarios = async (comentarios: any[]): Promise<CommentWithProfile[]> => {
+    return Promise.all(
+      comentarios.map(async (c) => {
+        const { count: totalLikes } = await supabase
+          .from('comment_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('comment_id', c.id)
+
+        let ja_curtiu = false
+        if (user) {
+          const { count } = await supabase
+            .from('comment_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('comment_id', c.id)
+            .eq('user_id', user.id)
+          ja_curtiu = (count ?? 0) > 0
+        }
+
+        return { ...c, _count_likes: totalLikes ?? 0, ja_curtiu }
+      })
+    )
   }
 
   const handleCurtir = async () => {
@@ -112,12 +239,45 @@ export default function PostDetailPage() {
     }
   }
 
-  // Detecta @ no input
+  const handleCurtirComentario = async (commentId: string) => {
+    if (!user) { toast.error('Faça login para curtir'); return }
+
+    const comment = comments.find((c) => c.id === commentId)
+    if (!comment) return
+
+    if (comment.ja_curtiu) {
+      await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id)
+    } else {
+      await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id })
+    }
+
+    setComments((prev) => prev.map((c) => c.id !== commentId ? c : {
+      ...c,
+      ja_curtiu:    !c.ja_curtiu,
+      _count_likes: c.ja_curtiu ? (c._count_likes ?? 1) - 1 : (c._count_likes ?? 0) + 1,
+    }))
+  }
+
+  const handleDeletarComentario = async (commentId: string) => {
+    if (confirmDeleteId !== commentId) {
+      setConfirmDeleteId(commentId)
+      return
+    }
+    setDeletandoId(commentId)
+    const { error } = await supabase.from('comments').delete().eq('id', commentId)
+    setDeletandoId(null)
+    setConfirmDeleteId(null)
+    if (error) {
+      toast.error('Erro ao deletar comentário')
+    } else {
+      toast.success('Comentário deletado')
+      setComments((prev) => prev.filter((c) => c.id !== commentId))
+    }
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     setNovoComentario(val)
-
-    // Detecta @palavra no final ou no meio do texto
     const match = val.match(/@(\w*)$/)
     if (match) {
       setMencaoQuery(match[1])
@@ -127,7 +287,6 @@ export default function PostDetailPage() {
     }
   }
 
-  // Seleciona sugestão de @menção
   const selecionarMencao = (perfil: Profile) => {
     const novoTexto = novoComentario.replace(/@(\w*)$/, `@${perfil.username} `)
     setNovoComentario(novoTexto)
@@ -136,7 +295,6 @@ export default function PostDetailPage() {
     inputRef.current?.focus()
   }
 
-  // Navega sugestões com teclado
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (mencaoAberta && mencaoSugestoes.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMencaoIndex((i) => Math.min(i + 1, mencaoSugestoes.length - 1)) }
@@ -162,7 +320,6 @@ export default function PostDetailPage() {
 
     setEnviando(true)
 
-    // Upload áudio se houver
     let audioUrl: string | null = null
     if (audioFile) audioUrl = await uploadAudioComentario()
 
@@ -177,27 +334,20 @@ export default function PostDetailPage() {
     if (error) {
       toast.error('Erro ao comentar')
     } else {
-      setComments((prev) => [...prev, data])
+      setComments((prev) => [...prev, { ...data, _count_likes: 0, ja_curtiu: false }])
       setNovoComentario('')
-      setMencaoAberta(false)
       setAudioFile(null)
       setAudioPreviewUrl(null)
       setMostrarGravador(false)
 
-      // Notifica dono do post
       if (post && post.user_id !== user.id) {
         await criarNotificacao({ userId: post.user_id, actorId: user.id, tipo: 'comentario', postId })
       }
 
-      // Notifica usuários mencionados
       const mencoes = novoComentario.match(/@(\w+)/g) ?? []
       for (const mencao of mencoes) {
         const username = mencao.slice(1)
-        const { data: perfilMencao } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('username', username)
-          .single()
+        const { data: perfilMencao } = await supabase.from('profiles').select('id').eq('username', username).single()
         if (perfilMencao && perfilMencao.id !== user.id && perfilMencao.id !== post?.user_id) {
           await criarNotificacao({ userId: perfilMencao.id, actorId: user.id, tipo: 'comentario', postId })
         }
@@ -292,7 +442,7 @@ export default function PostDetailPage() {
         </div>
       </motion.div>
 
-      {/* Caixa de comentário com @menção */}
+      {/* Caixa de comentário */}
       {user && (
         <div className="card p-4 mb-4 relative">
           <div className="flex gap-3">
@@ -311,24 +461,15 @@ export default function PostDetailPage() {
                   maxLength={500}
                   className="input text-sm py-2 w-full"
                 />
-
-                {/* Sugestões de @menção */}
                 <AnimatePresence>
                   {mencaoAberta && mencaoSugestoes.length > 0 && (
                     <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
+                      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
                       className="absolute bottom-full mb-1 left-0 right-0 bg-brand-card border border-brand-border rounded-xl shadow-xl overflow-hidden z-30"
                     >
                       {mencaoSugestoes.map((p, i) => (
-                        <button
-                          key={p.id}
-                          onClick={() => selecionarMencao(p)}
-                          className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors',
-                            i === mencaoIndex ? 'bg-brand-green/10' : 'hover:bg-brand-surface'
-                          )}
+                        <button key={p.id} onClick={() => selecionarMencao(p)}
+                          className={cn('w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors', i === mencaoIndex ? 'bg-brand-green/10' : 'hover:bg-brand-surface')}
                         >
                           <div className="w-7 h-7 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
                             {p.foto_url
@@ -368,7 +509,6 @@ export default function PostDetailPage() {
             </div>
           </div>
 
-          {/* Gravador de áudio */}
           <AnimatePresence>
             {mostrarGravador && !audioPreviewUrl && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3">
@@ -380,7 +520,6 @@ export default function PostDetailPage() {
             )}
           </AnimatePresence>
 
-          {/* Preview do áudio gravado */}
           {audioPreviewUrl && (
             <div className="mt-3">
               <AudioPlayer url={audioPreviewUrl} />
@@ -401,39 +540,108 @@ export default function PostDetailPage() {
             <p className="text-brand-muted text-sm">Nenhum comentário ainda. Seja o primeiro! 💬</p>
           </div>
         ) : (
-          comments.map((comment) => (
-            <motion.div key={comment.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card p-4">
-              <div className="flex gap-3">
-                <Link href={`/main/perfil/${comment.profiles?.id}`}>
-                  <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
-                    {comment.profiles?.foto_url
-                      ? <img src={comment.profiles.foto_url} alt={comment.profiles.nome} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-brand-muted">{comment.profiles?.nome?.[0]?.toUpperCase() ?? '?'}</div>
-                    }
+          comments.map((comment) => {
+            const ehMeuComentario = user?.id === comment.user_id
+            const confirmando     = confirmDeleteId === comment.id
+            const deletando       = deletandoId === comment.id
+
+            return (
+              <motion.div key={comment.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card p-4">
+                <div className="flex gap-3">
+                  <Link href={`/main/perfil/${comment.profiles?.id}`}>
+                    <div className="w-8 h-8 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
+                      {comment.profiles?.foto_url
+                        ? <img src={comment.profiles.foto_url} alt={comment.profiles.nome} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-brand-muted">{comment.profiles?.nome?.[0]?.toUpperCase() ?? '?'}</div>
+                      }
+                    </div>
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    {/* Cabeçalho do comentário */}
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-semibold text-white truncate">{comment.profiles?.nome}</span>
+                        <span className="text-xs text-brand-muted shrink-0">@{comment.profiles?.username}</span>
+                        <span className="text-xs text-brand-muted shrink-0">· {tempoRelativo(comment.created_at)}</span>
+                      </div>
+
+                      {/* Botão deletar — só para o autor */}
+                      {ehMeuComentario && (
+                        <button
+                          onClick={() => {
+                            if (confirmando) {
+                              handleDeletarComentario(comment.id)
+                            } else {
+                              setConfirmDeleteId(comment.id)
+                              // Auto-cancela após 3s
+                              setTimeout(() => setConfirmDeleteId((prev) => prev === comment.id ? null : prev), 3000)
+                            }
+                          }}
+                          disabled={deletando}
+                          className={cn(
+                            'flex items-center gap-1 text-xs transition-colors shrink-0 px-2 py-0.5 rounded-lg',
+                            confirmando
+                              ? 'text-red-400 bg-red-500/10 border border-red-500/20'
+                              : 'text-brand-muted hover:text-red-400 hover:bg-brand-surface'
+                          )}
+                        >
+                          {deletando
+                            ? <div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
+                            : <Trash2 size={12} />
+                          }
+                          {confirmando && <span>Confirmar?</span>}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Conteúdo */}
+                    {comment.conteudo && (
+                      <p className="text-sm text-gray-300 leading-relaxed">
+                        <TextoComMencoes texto={comment.conteudo} />
+                      </p>
+                    )}
+                    {(comment as any).audio_url && (
+                      <div className="mt-1">
+                        <AudioPlayer url={(comment as any).audio_url} />
+                      </div>
+                    )}
+
+                    {/* Rodapé: like do comentário */}
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        onClick={() => handleCurtirComentario(comment.id)}
+                        className={cn(
+                          'flex items-center gap-1 text-xs transition-colors',
+                          comment.ja_curtiu ? 'text-red-400' : 'text-brand-muted hover:text-red-400'
+                        )}
+                      >
+                        <motion.div animate={comment.ja_curtiu ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.25 }}>
+                          <Heart size={13} className={comment.ja_curtiu ? 'fill-red-400' : ''} />
+                        </motion.div>
+                      </button>
+                      <button
+                        onClick={() => setModalLikesCommentId(comment.id)}
+                        className="flex items-center gap-1 text-xs text-brand-muted hover:text-white transition-colors"
+                      >
+                        <Users size={12} />
+                        <span>{formatarNumero(comment._count_likes ?? 0)}</span>
+                      </button>
+                    </div>
                   </div>
-                </Link>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-white">{comment.profiles?.nome}</span>
-                    <span className="text-xs text-brand-muted">@{comment.profiles?.username}</span>
-                    <span className="text-xs text-brand-muted">· {tempoRelativo(comment.created_at)}</span>
-                  </div>
-                  {/* Texto com @menções clicáveis */}
-                  {comment.conteudo && (
-                    <p className="text-sm text-gray-300 leading-relaxed">
-                      <TextoComMencoes texto={comment.conteudo} />
-                    </p>
-                  )}
-                  {/* Áudio do comentário */}
-                  {(comment as any).audio_url && (
-                    <AudioPlayer url={(comment as any).audio_url} />
-                  )}
                 </div>
-              </div>
-            </motion.div>
-          ))
+              </motion.div>
+            )
+          })
         )}
       </div>
+
+      {/* Modal likes do comentário */}
+      {modalLikesCommentId && (
+        <ModalLikesComentario
+          commentId={modalLikesCommentId}
+          onClose={() => setModalLikesCommentId(null)}
+        />
+      )}
     </div>
   )
 }

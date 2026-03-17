@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X, MessageCircle, Heart, MessageSquare, UserPlus } from 'lucide-react'
+import { Home, PieChart, PlusSquare, TrendingUp, LogOut, Newspaper, Search, Bell, MoreHorizontal, X, MessageCircle, Heart, MessageSquare, UserPlus, Share2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotificacoes } from '@/hooks/useNotificacoes'
 import { useChat } from '@/hooks/useChat'
@@ -55,6 +55,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     router.push('/auth/login')
   }
 
+  const handleConvidar = () => {
+    const link = `${window.location.origin}/convite`
+    const texto = `🚀 Investi no Investagram — a rede social dos investidores! Compartilhe operações, teses e carteiras em tempo real. Entra aqui: ${link}`
+    const urlWhatsApp = `https://wa.me/?text=${encodeURIComponent(texto)}`
+    window.open(urlWhatsApp, '_blank')
+  }
+
   return (
     <div className="min-h-screen bg-brand-dark">
       <InstallPWA />
@@ -68,6 +75,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
           <span className="text-base font-bold text-white">Investagram</span>
         </Link>
+
+        {/* Botão Convide um Amigo - mobile */}
+        <button
+          onClick={handleConvidar}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-colors"
+        >
+          <UserPlus size={12} />
+          <span>Convide</span>
+        </button>
 
         {/* Sino de notificações */}
         <Link
@@ -124,6 +140,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </nav>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleConvidar}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors mr-1"
+          >
+            <UserPlus size={14} />
+            <span>Convide um amigo</span>
+          </button>
           <Link href="/main/chat"
             className={cn('relative p-2 rounded-xl transition-colors',
               pathname.startsWith('/main/chat') ? 'text-brand-green bg-brand-green/10' : 'text-brand-muted hover:text-white hover:bg-brand-surface'

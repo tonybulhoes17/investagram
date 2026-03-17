@@ -11,6 +11,7 @@ import { calcularScore } from '@/lib/relevancia'
 import { CriarEnquete } from '@/components/enquetes/CriarEnquete'
 import { AudioRecorder, AudioPlayer } from '@/components/AudioRecorder'
 import toast from 'react-hot-toast'
+import { compressImage } from '@/lib/compressImage'
 
 type TipoPost = 'movimentacao' | 'tese' | 'enquete'
 type Subtipo  = 'compra' | 'venda'
@@ -47,7 +48,7 @@ export default function PublicarPage() {
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
   const [mostrarGravador, setMostrarGravador] = useState(false)
 
-  const handleImagensSelecionadas = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImagensSelecionadas = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
 
@@ -59,11 +60,18 @@ export default function PublicarPage() {
     if (grandes.length) { toast.error(`${grandes.length} imagem(ns) acima de 5MB foram ignoradas`) }
 
     const validas = selecionadas.filter(f => f.size <= 5 * 1024 * 1024)
-    const novas: FotoItem[] = validas.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-      id: `${Date.now()}-${Math.random()}`,
-    }))
+
+    // Comprime cada imagem antes de exibir preview
+    const novas: FotoItem[] = await Promise.all(
+      validas.map(async (file) => {
+        const comprimido = await compressImage(file)
+        return {
+          file:    comprimido,
+          preview: URL.createObjectURL(comprimido),
+          id:      `${Date.now()}-${Math.random()}`,
+        }
+      })
+    )
 
     setFotos(prev => [...prev, ...novas])
 
@@ -98,9 +106,12 @@ export default function PublicarPage() {
     const urls: string[] = []
 
     for (const foto of fotos) {
-      const ext      = foto.file.name.split('.').pop()
+      const ext      = foto.file.name.split('.').pop() ?? 'jpg'
       const caminho  = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error } = await supabase.storage.from('post-images').upload(caminho, foto.file, { upsert: true })
+      const { error } = await supabase.storage.from('post-images').upload(caminho, foto.file, {
+        upsert:       true,
+        contentType:  foto.file.type,
+      })
       if (error) { toast.error('Erro ao enviar imagem'); setUploadando(false); return [] }
       const { data } = supabase.storage.from('post-images').getPublicUrl(caminho)
       urls.push(data.publicUrl)

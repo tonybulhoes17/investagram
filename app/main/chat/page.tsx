@@ -10,6 +10,7 @@ import { tempoRelativo, cn } from '@/lib/utils'
 import { AudioRecorder, AudioPlayer } from '@/components/AudioRecorder'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { compressImage } from '@/lib/compressImage'
 
 // ── Bolha de imagem clicável ─────────────────────────────────
 function BolhaImagem({ url, ehMeu }: { url: string; ehMeu: boolean }) {
@@ -102,12 +103,13 @@ function TelaConversa({ conversaId, onVoltar }: { conversaId: string; onVoltar: 
   const conversa  = conversas.find((c) => c.id === conversaId)
   const podEnviar = !!texto.trim() || !!imagemFile || !!audioFile
 
-  const handleImagemSelecionada = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImagemSelecionada = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { toast.error('Imagem muito grande. Máximo 5MB'); return }
-    setImagemFile(file)
-    setImagemPreview(URL.createObjectURL(file))
+    const comprimido = await compressImage(file)
+    setImagemFile(comprimido)
+    setImagemPreview(URL.createObjectURL(comprimido))
     if (inputImagemRef.current) inputImagemRef.current.value = ''
   }
 
