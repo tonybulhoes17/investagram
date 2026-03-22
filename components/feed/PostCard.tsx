@@ -381,15 +381,88 @@ type CarteiraAsset = {
   percentual: number
 }
 
+// Gráfico pizza SVG puro — agrupa por categoria
+function PizzaChart({ ativos }: { ativos: CarteiraAsset[] }) {
+  // Agrupa por classe
+  const grupos: Record<string, number> = {}
+  for (const a of ativos) {
+    grupos[a.classe] = (grupos[a.classe] ?? 0) + a.percentual
+  }
+  const fatias = Object.entries(grupos)
+    .map(([classe, pct]) => ({ classe, pct }))
+    .sort((a, b) => b.pct - a.pct)
+
+  // Gera arcos SVG
+  const cx = 60, cy = 60, r = 52, inner = 28
+  let startAngle = -Math.PI / 2
+  const paths: { d: string; cor: string; classe: string; pct: number }[] = []
+
+  for (const f of fatias) {
+    const angle = (f.pct / 100) * 2 * Math.PI
+    const endAngle = startAngle + angle
+    const x1 = cx + r * Math.cos(startAngle)
+    const y1 = cy + r * Math.sin(startAngle)
+    const x2 = cx + r * Math.cos(endAngle)
+    const y2 = cy + r * Math.sin(endAngle)
+    const ix1 = cx + inner * Math.cos(startAngle)
+    const iy1 = cy + inner * Math.sin(startAngle)
+    const ix2 = cx + inner * Math.cos(endAngle)
+    const iy2 = cy + inner * Math.sin(endAngle)
+    const large = angle > Math.PI ? 1 : 0
+    const d = [
+      `M ${x1} ${y1}`,
+      `A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`,
+      `L ${ix2} ${iy2}`,
+      `A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1}`,
+      'Z'
+    ].join(' ')
+    const cor = (ASSET_CLASSE_COLORS as any)[f.classe] ?? '#6b7280'
+    paths.push({ d, cor, classe: f.classe, pct: f.pct })
+    startAngle = endAngle
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      {/* Pizza */}
+      <svg width="120" height="120" viewBox="0 0 120 120" className="shrink-0">
+        {paths.map((p, i) => (
+          <path key={i} d={p.d} fill={p.cor} stroke="#0f172a" strokeWidth="1.5">
+            <title>{(ASSET_CLASSE_LABELS as any)[p.classe] ?? p.classe}: {p.pct.toFixed(1)}%</title>
+          </path>
+        ))}
+        {/* Centro */}
+        <circle cx={60} cy={60} r={26} fill="#0f172a" />
+        <text x={60} y={57} textAnchor="middle" fontSize="9" fill="#6b7280" fontFamily="sans-serif">Total</text>
+        <text x={60} y={68} textAnchor="middle" fontSize="10" fill="#10b981" fontWeight="bold" fontFamily="sans-serif">100%</text>
+      </svg>
+
+      {/* Legenda de categorias */}
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+        {paths.map((p, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.cor }} />
+            <span className="text-xs text-white/70 truncate flex-1">
+              {(ASSET_CLASSE_LABELS as any)[p.classe] ?? p.classe}
+            </span>
+            <span className="text-xs font-bold text-brand-green shrink-0">{p.pct.toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function CarteiraCard({ post }: { post: any }) {
   let ativos: CarteiraAsset[] = []
   try { ativos = JSON.parse(post.conteudo ?? '[]') } catch { ativos = [] }
 
+  // Ordena por percentual decrescente
+  const ativosOrdenados = [...ativos].sort((a, b) => b.percentual - a.percentual)
   const ehCriacao = post.subtipo === 'criacao'
 
   return (
     <div className="mb-3">
-      {/* Badge carteira */}
+      {/* Badge */}
       <div className="flex items-center gap-2 mb-3">
         <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
           <PieChart size={10} />
@@ -397,38 +470,39 @@ function CarteiraCard({ post }: { post: any }) {
         </span>
       </div>
 
-      {/* Gráfico de barras horizontal */}
-      {ativos.length > 0 && (
-        <div className="mb-3">
-          {/* Barra segmentada */}
-          <div className="flex h-3 rounded-full overflow-hidden mb-3 gap-px">
-            {ativos.map((a, i) => (
-              <div
-                key={i}
-                style={{
-                  width:           `${a.percentual}%`,
-                  backgroundColor: (ASSET_CLASSE_COLORS as any)[a.classe] ?? '#6b7280',
-                  minWidth:        a.percentual > 0 ? '2px' : '0',
-                }}
-                title={`${a.nome}: ${a.percentual}%`}
-              />
-            ))}
-          </div>
+      {ativosOrdenados.length > 0 && (
+        <div className="bg-brand-surface/40 border border-brand-border/50 rounded-xl p-3 mb-3">
+          {/* Gráfico pizza */}
+          <PizzaChart ativos={ativosOrdenados} />
 
-          {/* Lista de ativos */}
-          <div className="space-y-1.5">
-            {ativos.map((a, i) => (
+          {/* Divisor */}
+          <div className="border-t border-brand-border/40 my-3" />
+
+          {/* Lista ordenada por % */}
+          <div className="space-y-2">
+            {ativosOrdenados.map((a, i) => (
               <div key={i} className="flex items-center gap-2">
                 <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: (ASSET_CLASSE_COLORS as any)[a.classe] ?? '#6b7280' }}
                 />
                 <span className="text-xs text-white font-medium truncate flex-1">
-                  {a.ticker ? (
-                    <><span className="text-brand-muted font-mono">{a.ticker}</span> · {a.nome}</>
-                  ) : a.nome}
+                  {a.ticker
+                    ? <><span className="text-brand-muted font-mono text-[11px]">{a.ticker}</span> · {a.nome}</>
+                    : a.nome
+                  }
                 </span>
-                <span className="text-xs font-bold text-brand-green shrink-0">
+                {/* Barra de progresso inline */}
+                <div className="w-16 h-1.5 bg-brand-surface rounded-full overflow-hidden shrink-0">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${a.percentual}%`,
+                      backgroundColor: (ASSET_CLASSE_COLORS as any)[a.classe] ?? '#6b7280',
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-brand-green shrink-0 w-10 text-right">
                   {a.percentual.toFixed(1)}%
                 </span>
               </div>
