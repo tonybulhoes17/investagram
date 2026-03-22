@@ -4,9 +4,9 @@ import { useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, MessageCircle, Share2, TrendingUp, TrendingDown, ChevronDown, ChevronUp, MoreVertical, Pencil, Trash2, X, Users, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Heart, MessageCircle, Share2, TrendingUp, TrendingDown, ChevronDown, ChevronUp, MoreVertical, Pencil, Trash2, X, Users, ChevronLeft, ChevronRight, PieChart } from 'lucide-react'
 import { tempoRelativo, formatarNumero, cn } from '@/lib/utils'
-import { ASSET_CLASSE_LABELS } from '@/types'
+import { ASSET_CLASSE_LABELS, ASSET_CLASSE_COLORS } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { criarNotificacao } from '@/lib/notificacoes'
@@ -29,8 +29,7 @@ type CurtidaProfile = {
 
 type UltimoComentario = {
   id:         string
-  conteudo:   string | null
-  audio_url:  string | null
+  conteudo:   string
   created_at: string
   autor: {
     id:       string
@@ -336,14 +335,12 @@ function ModalCurtidas({ postId, onClose }: { postId: string; onClose: () => voi
 function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComentario; postId: string }) {
   const MAX = 120
   const [expandido, setExpandido] = useState(false)
-  const temTexto = !!comentario.conteudo?.trim()
-  const longo    = (comentario.conteudo?.length ?? 0) > MAX
-  const texto    = expandido || !longo ? comentario.conteudo : comentario.conteudo!.slice(0, MAX) + '…'
+  const longo = comentario.conteudo.length > MAX
+  const texto = expandido || !longo ? comentario.conteudo : comentario.conteudo.slice(0, MAX) + '…'
 
   return (
     <Link href={`/main/post/${postId}`} className="block group">
       <div className="mt-3 px-3 py-2.5 bg-brand-surface/60 border border-brand-border/40 rounded-xl hover:border-brand-green/20 transition-colors">
-        {/* Cabeçalho: avatar + nome + tempo */}
         <div className="flex items-center gap-2 mb-1.5">
           <div className="w-5 h-5 rounded-full bg-brand-surface border border-brand-border overflow-hidden shrink-0">
             {comentario.autor?.foto_url
@@ -358,33 +355,90 @@ function UltimoComentarioCard({ comentario, postId }: { comentario: UltimoComent
             {tempoRelativo(comentario.created_at)}
           </span>
         </div>
-
-        {/* Texto */}
-        {temTexto && (
-          <p className="text-xs text-gray-400 leading-relaxed">
-            {texto}
-            {longo && !expandido && (
-              <button
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpandido(true) }}
-                className="text-brand-green hover:underline ml-1"
-              >
-                ver mais
-              </button>
-            )}
-          </p>
-        )}
-
-        {/* Áudio — impede navegação ao clicar no player */}
-        {comentario.audio_url && (
-          <div onClick={(e) => e.preventDefault()} className="mt-1">
-            <AudioPlayer url={comentario.audio_url} />
-          </div>
-        )}
+        <p className="text-xs text-gray-400 leading-relaxed">
+          {texto}
+          {longo && !expandido && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpandido(true) }}
+              className="text-brand-green hover:underline ml-1"
+            >
+              ver mais
+            </button>
+          )}
+        </p>
       </div>
     </Link>
   )
 }
 
+
+
+// ── Snapshot de carteira no feed ────────────────────────────
+type CarteiraAsset = {
+  classe:     string
+  nome:       string
+  ticker:     string | null
+  percentual: number
+}
+
+function CarteiraCard({ post }: { post: any }) {
+  let ativos: CarteiraAsset[] = []
+  try { ativos = JSON.parse(post.conteudo ?? '[]') } catch { ativos = [] }
+
+  const ehCriacao = post.subtipo === 'criacao'
+
+  return (
+    <div className="mb-3">
+      {/* Badge carteira */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+          <PieChart size={10} />
+          {ehCriacao ? '🎉 Nova Carteira' : '🔄 Carteira Atualizada'}
+        </span>
+      </div>
+
+      {/* Gráfico de barras horizontal */}
+      {ativos.length > 0 && (
+        <div className="mb-3">
+          {/* Barra segmentada */}
+          <div className="flex h-3 rounded-full overflow-hidden mb-3 gap-px">
+            {ativos.map((a, i) => (
+              <div
+                key={i}
+                style={{
+                  width:           `${a.percentual}%`,
+                  backgroundColor: (ASSET_CLASSE_COLORS as any)[a.classe] ?? '#6b7280',
+                  minWidth:        a.percentual > 0 ? '2px' : '0',
+                }}
+                title={`${a.nome}: ${a.percentual}%`}
+              />
+            ))}
+          </div>
+
+          {/* Lista de ativos */}
+          <div className="space-y-1.5">
+            {ativos.map((a, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: (ASSET_CLASSE_COLORS as any)[a.classe] ?? '#6b7280' }}
+                />
+                <span className="text-xs text-white font-medium truncate flex-1">
+                  {a.ticker ? (
+                    <><span className="text-brand-muted font-mono">{a.ticker}</span> · {a.nome}</>
+                  ) : a.nome}
+                </span>
+                <span className="text-xs font-bold text-brand-green shrink-0">
+                  {a.percentual.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── PostCard principal ───────────────────────────────────────
 export function PostCard({ post, onCurtir, onDeletar }: Props) {
@@ -485,17 +539,19 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
         </div>
 
         {/* Tipo do post */}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full border', post.tipo === 'movimentacao' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20')}>
-            {post.tipo === 'movimentacao' ? '📊 Movimentação' : '💡 Tese de Investimento'}
-          </span>
-          {post.subtipo && (
-            <span className={cn('flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border', post.subtipo === 'compra' ? 'bg-brand-green/10 text-brand-green border-brand-green/20' : 'bg-red-500/10 text-red-400 border-red-500/20')}>
-              {post.subtipo === 'compra' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-              {post.subtipo === 'compra' ? 'Compra' : 'Venda'}
+        {post.tipo !== 'carteira' && (
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full border', post.tipo === 'movimentacao' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20')}>
+              {post.tipo === 'movimentacao' ? '📊 Movimentação' : '💡 Tese de Investimento'}
             </span>
-          )}
-        </div>
+            {post.subtipo && (
+              <span className={cn('flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border', post.subtipo === 'compra' ? 'bg-brand-green/10 text-brand-green border-brand-green/20' : 'bg-red-500/10 text-red-400 border-red-500/20')}>
+                {post.subtipo === 'compra' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                {post.subtipo === 'compra' ? 'Compra' : 'Venda'}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Ativo */}
         {post.ativo_nome && (
@@ -521,8 +577,11 @@ export function PostCard({ post, onCurtir, onDeletar }: Props) {
           </div>
         )}
 
-        {/* Conteúdo */}
-        {post.conteudo && (
+        {/* Conteúdo carteira */}
+        {post.tipo === 'carteira' && <CarteiraCard post={post} />}
+
+        {/* Conteúdo texto (não carteira) */}
+        {post.tipo !== 'carteira' && post.conteudo && (
           <div className="mb-4">
             <p className={cn('text-sm text-gray-300 leading-relaxed', !expandido && temConteudo && 'line-clamp-3')}>
               {post.conteudo}

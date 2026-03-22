@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { CarteiraChart } from '@/components/carteira/PieChart'
 import { ASSET_CLASSE_LABELS, ASSET_CLASSE_COLORS, type AssetClasse, type PortfolioAsset } from '@/types'
 import toast from 'react-hot-toast'
+import { calcularScore } from '@/lib/relevancia'
 
 const CLASSES = Object.entries(ASSET_CLASSE_LABELS) as [AssetClasse, string][]
 
@@ -83,6 +84,45 @@ export default function CarteiraPage() {
   const atualizar       = (idx: number, campo: keyof AssetForm, valor: string) =>
     setAssets((prev) => prev.map((a, i) => i === idx ? { ...a, [campo]: valor } : a))
 
+  const publicarCarteiraNoFeed = async (
+    validos: AssetForm[],
+    total: number,
+    ehCriacao: boolean
+  ) => {
+    if (!user) return
+
+    // Verifica se já existe post de carteira hoje
+    const hoje = new Date().toISOString().split('T')[0]
+    const { count } = await supabase
+      .from('posts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('tipo', 'carteira')
+      .gte('created_at', `${hoje}T00:00:00`)
+    if ((count ?? 0) > 0) return   // já publicou hoje
+
+    // Snapshot dos ativos (sem valores absolutos — privacidade)
+    const snapshot = validos.map((a) => {
+      const v = parseFloat(a.valor) || 0
+      return {
+        classe:     a.classe,
+        nome:       a.nome.trim(),
+        ticker:     a.ticker.trim() || null,
+        percentual: parseFloat(((v / total) * 100).toFixed(2)),
+      }
+    })
+
+    const score = calcularScore({ likes: 0, comments: 0, seguidores_autor: 0, created_at: new Date().toISOString() })
+
+    await supabase.from('posts').insert({
+      user_id:          user.id,
+      tipo:             'carteira',
+      subtipo:          ehCriacao ? 'criacao' : 'atualizacao',
+      conteudo:         JSON.stringify(snapshot),
+      score_relevancia: score,
+    })
+  }
+
   const salvar = async () => {
     if (!user) return
 
@@ -93,6 +133,8 @@ export default function CarteiraPage() {
     }
 
     setSalvando(true)
+
+    const ehCriacao = !portfolioId
 
     let pId = portfolioId
     if (!pId) {
@@ -108,7 +150,6 @@ export default function CarteiraPage() {
 
     if (!pId) { setSalvando(false); toast.error('Erro ao criar carteira'); return }
 
-    // Recalcula percentuais na hora de salvar
     const total = validos.reduce((s, a) => s + (parseFloat(a.valor) || 0), 0)
 
     await supabase.from('portfolio_assets').delete().eq('portfolio_id', pId)
@@ -126,6 +167,9 @@ export default function CarteiraPage() {
         }
       })
     )
+
+    // Publica no feed (máx 1x por dia)
+    await publicarCarteiraNoFeed(validos, total, ehCriacao)
 
     setSalvando(false)
     toast.success('Carteira salva! 📊')
