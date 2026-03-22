@@ -21,8 +21,8 @@ export type Profile = {
 export type Post = {
   id: string
   user_id: string
-  tipo: 'movimentacao' | 'tese'
-  subtipo?: 'compra' | 'venda' | null
+  tipo: 'movimentacao' | 'tese' | 'carteira'
+  subtipo?: 'compra' | 'venda' | 'criacao' | 'atualizacao' | null
   ativo_nome?: string | null
   ativo_classe?: AssetClasse | null
   conteudo?: string | null
