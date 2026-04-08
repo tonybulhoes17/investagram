@@ -84,8 +84,18 @@ export function useFeed(userId?: string) {
       idsSeguindo = seguindo?.map((s) => s.following_id) ?? []
     }
 
-    // 2. Posts de quem segue + próprios posts (usuário "segue a si mesmo")
-    const idsSeguindoComProprio = userId ? [...idsSeguindo, userId] : idsSeguindo
+    // 2. Busca ID do perfil oficial (posts sempre aparecem no Seguindo)
+    const { data: perfilOficial } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', 'investagramoficial')
+      .single()
+    const idOficial = perfilOficial?.id
+
+    // Posts de quem segue + próprios posts + perfil oficial (sempre incluso)
+    const idsSeguindoComProprio = userId
+      ? [...new Set([...idsSeguindo, userId, ...(idOficial ? [idOficial] : [])])]
+      : idOficial ? [idOficial] : idsSeguindo
     let seguindoPosts: FeedItem[] = []
     if (idsSeguindoComProprio.length > 0) {
       const { data } = await supabase
