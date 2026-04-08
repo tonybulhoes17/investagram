@@ -94,7 +94,7 @@ export function useFeed(userId?: string) {
 
     // Posts de quem segue + próprios posts + perfil oficial (sempre incluso)
     const idsSeguindoComProprio = userId
-      ? [...new Set([...idsSeguindo, userId, ...(idOficial ? [idOficial] : [])])]
+      ? Array.from(new Set([...idsSeguindo, userId, ...(idOficial ? [idOficial] : [])]))
       : idOficial ? [idOficial] : idsSeguindo
     let seguindoPosts: FeedItem[] = []
     if (idsSeguindoComProprio.length > 0) {
